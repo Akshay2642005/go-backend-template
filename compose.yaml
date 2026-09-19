@@ -1,0 +1,48 @@
+# Local development infrastructure for the backend template.
+#
+# Starts Postgres and Redis, mapped to the ports the app expects
+# (BOILERPLATE_DATABASE.* and BOILERPLATE_REDIS.ADDRESS in .env).
+#
+# Usage:
+#   docker compose up -d        # start postgres + redis
+#   docker compose down         # stop containers (keeps volumes)
+#   docker compose down -v      # stop and delete volumes (full reset)
+name: boilerplate
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: boilerplate-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: boilerplate
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d boilerplate"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    container_name: boilerplate-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

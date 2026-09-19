@@ -1,8 +1,5 @@
 version: "3"
 
-vars:
-  BOILERPLATE_DB_DSN: '{{.BOILERPLATE_DB_DSN | default ""}}'
-
 tasks:
   help:
     desc: print this help message
@@ -23,6 +20,26 @@ tasks:
     cmds:
       - go run ./cmd/go-boilerplate
 
+  compose:up:
+    desc: start local database and redis
+    cmds:
+      - docker compose up -d
+
+  compose:down:
+    desc: stop local database and redis (keeps volumes)
+    cmds:
+      - docker compose down
+
+  compose:down-v:
+    desc: stop local database and redis and delete volumes
+    cmds:
+      - docker compose down -v
+
+  test:
+    desc: run all tests
+    cmds:
+      - go test ./...
+
   migrations:new:
     desc: create a new database migration
     vars:
@@ -40,9 +57,11 @@ tasks:
   migrations:up:
     desc: apply all up database migrations
     deps: [confirm]
+    dotenv:
+      - .env
     cmds:
       - echo 'Running up migrations...'
-      - tern migrate -m ./internal/database/migrations --conn-string {{.BOILERPLATE_DB_DSN}}
+      - tern migrate -m ./internal/database/migrations --conn-string "$BOILERPLATE_DB_DSN"
 
   tidy:
     desc: format all .go files, and tidy and vendor module dependencies
