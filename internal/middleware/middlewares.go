@@ -11,6 +11,8 @@ type Middlewares struct {
 	Tracing         *TracingMiddleware
 	RateLimit       *RateLimitMiddleware
 	Metrics         *MetricsMiddleware
+	CacheControl    *CacheControlMiddleware
+	Idempotency     *idempotencyMiddleware
 }
 
 func NewMiddlewares(s *server.Server) *Middlewares {
@@ -21,5 +23,7 @@ func NewMiddlewares(s *server.Server) *Middlewares {
 		Tracing:         NewTracingMiddleware(s),
 		RateLimit:       NewRateLimitMiddleware(s),
 		Metrics:         NewMetricsMiddleware(s),
+		CacheControl:    NewCacheControlMiddleware(s, CacheControlConfig{}),
+		Idempotency:     NewIdempotencyMiddleware(s, IdempotencyConfig{}),
 	}
 }

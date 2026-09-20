@@ -60,12 +60,12 @@ func (h *HealthHandler) CheckHealth(c echo.Context) error {
 	}
 
 	// Check Redis connectivity
-	if h.server.Redis != nil {
+	if h.server.Cache != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		redisStart := time.Now()
-		if err := h.server.Redis.Ping(ctx).Err(); err != nil {
+		if err := h.server.Cache.Ping(ctx); err != nil {
 			checks["redis"] = map[string]interface{}{
 				"status":        "unhealthy",
 				"response_time": time.Since(redisStart).String(),

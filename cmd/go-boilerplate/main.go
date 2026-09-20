@@ -12,6 +12,7 @@ import (
 	"backend/internal/database"
 	"backend/internal/handler"
 	"backend/internal/logger"
+	"backend/internal/otel"
 	"backend/internal/repository"
 	"backend/internal/router"
 	"backend/internal/server"
@@ -27,6 +28,12 @@ func main() {
 	}
 
 	log := logger.NewLogger(cfg.Observability)
+
+	// Initialize OpenTelemetry (no-op when disabled)
+	otelShutdown, err := otel.Init(context.Background(), cfg.Observability, cfg.Observability.ServiceName)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize OpenTelemetry")
+	}
 
 	if cfg.Primary.Env != "local" {
 		if err := database.Migrate(context.Background(), &log, cfg); err != nil {
@@ -48,7 +55,7 @@ func main() {
 	}
 	handlers := handler.NewHandlers(srv, services)
 
-	// Initialize
+	// Initialize router
 	r := router.NewRouter(srv, handlers, services)
 
 	// Setup HTTP server
@@ -66,6 +73,11 @@ func main() {
 	// Wait for interrupt signal to gracefully shutdown the server
 	<-ctx.Done()
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultContextTimeout*time.Second)
+
+	// Shutdown OpenTelemetry
+	if err := otelShutdown(ctx); err != nil {
+		log.Warn().Err(err).Msg("failed to shutdown OpenTelemetry")
+	}
 
 	if err = srv.Shutdown(ctx); err != nil {
 		log.Fatal().Err(err).Msg("server forced to shutdown")

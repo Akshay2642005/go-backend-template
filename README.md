@@ -10,13 +10,14 @@ This backend follows clean architecture principles with clear separation of conc
 backend/
 ├── cmd/go-boilerplate/        # Application entry point
 ├── internal/                  # Private application code
+│   ├── cache/                # Redis cache control (operations, keys, metrics, fail-open)
 │   ├── config/               # Configuration management
 │   ├── database/             # Database connections and migrations
 │   ├── handler/              # HTTP request handlers
 │   ├── service/              # Business logic layer
 │   ├── repository/           # Data access layer
 │   ├── model/                # Domain models
-│   ├── middleware/           # HTTP middleware
+│   ├── middleware/           # HTTP middleware (auth, cache control, rate limit, etc.)
 │   ├── lib/                  # Shared libraries
 │   └── validation/           # Request validation
 ├── static/                   # Static files (OpenAPI spec)
@@ -45,13 +46,33 @@ backend/
 - **Security Headers**: XSS, CSRF, and clickjacking protection
 
 ### Observability
-- **Sentry**: Application performance monitoring, error tracking, and request metrics
+- **OpenTelemetry**: Distributed tracing and metrics with OTLP/gRPC export (disabled by default)
 - **Structured Logging**: JSON logs with Zerolog
-- **Log Forwarding**: error/fatal log lines mirrored to Sentry in every environment (5xx request failures only reach the error stream; 4xx stay local as warnings)
-- **Request Tracing**: Distributed tracing support (health-check and static traffic excluded)
-- **Request Metrics**: request count and latency emitted via the Sentry Metrics API
-- **Health Checks**: Readiness and liveness endpoints
-- **Custom Events**: Business-specific monitoring (rate limits, health failures)
+- **Request Tracing**: Automatic span creation and context propagation for HTTP requests
+- **Request Metrics**: `http.server.request.duration` histogram, `http.server.request.count` counter with method/status/route labels
+- **Cache Metrics**: `cache.operation.count` with hit/miss status
+- **Health Checks**: Readiness and liveness endpoints (database + Redis)
+- **Fail-Open**: Observability failures never block requests
+
+### Rate Limiting
+- **Redis-backed Sliding Window**: Distributed rate limiting across all instances
+- **Per-User or Per-IP**: Configurable key strategy (by user ID or client IP)
+- **Lua Script**: Atomic rate limit checks via Redis EVALSHA for performance
+- **Fail-Open**: Redis failures allow requests through (never block)
+- **Standard Headers**: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`
+
+### Idempotency
+- **Redis-backed**: Idempotent request handling for POST/PUT/PATCH endpoints
+- **Client-Provided Keys**: Clients send `Idempotency-Key` header
+- **Response Caching**: Successful responses stored and replayed for duplicate requests
+- **Scoped by User**: Keys are scoped to user + method + path for isolation
+- **Configurable TTL**: Default 24h, adjustable per deployment
+
+### Database
+- **Transaction Helpers**: `WithTx` for automatic commit/rollback with error handling
+- **Read-Only Transactions**: Support for read-only transaction isolation
+- **Querier Interface**: Abstracts pool vs transaction for testable repositories
+- **Context Propagation**: Transactions injectable via `context.Context`
 
 ### Background Jobs
 - **Asynq**: Redis-based distributed task queue
@@ -59,6 +80,16 @@ backend/
 - **Job Scheduling**: Cron-like task scheduling
 - **Retry Logic**: Exponential backoff for failed jobs
 - **Job Monitoring**: Real-time job status tracking
+
+### Cache Control
+- **Enterprise Redis**: Single, cluster, and sentinel topology support via `redis.UniversalClient`
+- **Cache-Aside Pattern**: `GetOrSet` with automatic origin loading and cache storage
+- **Stampede Protection**: Singleflight deduplication of concurrent cache misses
+- **Fail-Open**: Redis failures never block requests — falls through to origin
+- **TTL Jitter**: Randomized expiration to prevent synchronized cache stampedes
+- **HTTP Caching**: `CacheControl` middleware with ETag, `If-None-Match` (304), and `Cache-Control` headers
+- **Key Namespacing**: Configurable prefix per environment with automatic SHA-256 hashing of long segments
+- **Observability**: Atomic hit/miss/error counters, slow-op logging, structured zerolog metrics
 
 ### Email Service
 - **Resend Integration**: Reliable email delivery
@@ -109,10 +140,19 @@ task run
 Configuration is managed through environment variables with the `BOILERPLATE_` prefix:
 
 ```bash
-# Sentry (empty DSN disables the SDK entirely)
-BOILERPLATE_OBSERVABILITY.SENTRY.DSN=""
-BOILERPLATE_OBSERVABILITY.SENTRY.ENABLE_TRACING="true"
-BOILERPLATE_OBSERVABILITY.SENTRY.TRACES_SAMPLE_RATE="1.0"
+# OpenTelemetry tracing (disabled by default)
+BOILERPLATE_OBSERVABILITY.TRACING.ENABLED="false"
+BOILERPLATE_OBSERVABILITY.TRACING.ENDPOINT="localhost:4317"
+BOILERPLATE_OBSERVABILITY.TRACING.SAMPLE_RATE="1.0"
+
+# Rate limiting (disabled by default)
+BOILERPLATE_SERVER.RATE_LIMIT.ENABLED="false"
+BOILERPLATE_SERVER.RATE_LIMIT.WINDOW="60s"
+BOILERPLATE_SERVER.RATE_LIMIT.MAX="100"
+
+# Idempotency (disabled by default)
+BOILERPLATE_SERVER.IDEMPOTENCY.ENABLED="false"
+BOILERPLATE_SERVER.IDEMPOTENCY.TTL="24h"
 ```
 
 ## Development
@@ -218,9 +258,13 @@ Log levels:
 - Query optimization with EXPLAIN ANALYZE
 
 ### Caching
-- Redis for session storage
-- In-memory caching for hot data
-- HTTP caching headers
+- Redis-backed cache with single, cluster, and sentinel topology support
+- Cache-aside pattern with singleflight stampede protection
+- Fail-open: cache failures never break the request path
+- TTL jitter to prevent synchronized cache stampedes
+- HTTP response caching middleware with ETag and Cache-Control
+- Atomic hit/miss/error metrics with slow-op logging
+- Configurable key prefix namespacing per environment
 
 ### Concurrency
 - Goroutine pools for parallel processing

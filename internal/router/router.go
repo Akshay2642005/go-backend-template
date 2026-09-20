@@ -1,17 +1,12 @@
 package router
 
 import (
-	"net/http"
-
 	"github.com/labstack/echo/v4"
-	echoMiddleware "github.com/labstack/echo/v4/middleware"
 
 	"backend/internal/handler"
 	"backend/internal/middleware"
 	"backend/internal/server"
 	"backend/internal/service"
-
-	"golang.org/x/time/rate"
 )
 
 func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services) *echo.Echo {
@@ -23,25 +18,7 @@ func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services
 
 	// global middlewares
 	router.Use(
-		echoMiddleware.RateLimiterWithConfig(echoMiddleware.RateLimiterConfig{
-			Store: echoMiddleware.NewRateLimiterMemoryStore(rate.Limit(20)),
-			DenyHandler: func(c echo.Context, identifier string, err error) error {
-				// Record rate limit hit metrics
-				if rateLimitMiddleware := middlewares.RateLimit; rateLimitMiddleware != nil {
-					rateLimitMiddleware.RecordRateLimitHit(c.Path())
-				}
-
-				s.Logger.Warn().
-					Str("request_id", middleware.GetRequestID(c)).
-					Str("identifier", identifier).
-					Str("path", c.Path()).
-					Str("method", c.Request().Method).
-					Str("ip", c.RealIP()).
-					Msg("rate limit exceeded")
-
-				return echo.NewHTTPError(http.StatusTooManyRequests, "Rate limit exceeded")
-			},
-		}),
+		middlewares.RateLimit.Handle(),
 		middlewares.Global.CORS(),
 		middlewares.Global.Secure(),
 		middleware.RequestID(),
@@ -55,8 +32,10 @@ func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services
 	// register system routes
 	registerSystemRoutes(router, h)
 
-	// register versioned routes
-	router.Group("/api/v1")
+	// register versioned routes with HTTP response caching and idempotency
+	api := router.Group("/api/v1")
+	api.Use(middlewares.CacheControl.Handle())
+	api.Use(middlewares.Idempotency.Handle())
 
 	return router
 }

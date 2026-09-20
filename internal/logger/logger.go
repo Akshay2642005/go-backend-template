@@ -59,7 +59,7 @@ func NewLogger(cfg *config.ObservabilityConfig) zerolog.Logger {
 // NewPgxLogger creates a database logger.
 func NewPgxLogger(level zerolog.Level) zerolog.Logger {
 	writer := zerolog.ConsoleWriter{
-		Out:       os.Stdout,
+		Out:        os.Stdout,
 		TimeFormat: "2006-01-02 15:04:05",
 		FormatFieldValue: func(i any) string {
 			switch v := i.(type) {
@@ -71,7 +71,7 @@ func NewPgxLogger(level zerolog.Level) zerolog.Logger {
 				}
 				return v
 			case []byte:
-				var obj interface{}
+				var obj any
 				if err := json.Unmarshal(v, &obj); err == nil {
 					pretty, _ := json.MarshalIndent(obj, "", "    ")
 					return "\n" + string(pretty)

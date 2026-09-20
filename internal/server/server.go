@@ -7,8 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
+	"backend/internal/cache"
 	"backend/internal/config"
 	"backend/internal/database"
 	"backend/internal/lib/job"
@@ -20,7 +19,7 @@ type Server struct {
 	Config     *config.Config
 	Logger     *zerolog.Logger
 	DB         *database.Database
-	Redis      *redis.Client
+	Cache      *cache.Cache
 	httpServer *http.Server
 	Job        *job.JobService
 }
@@ -31,19 +30,8 @@ func New(cfg *config.Config, logger *zerolog.Logger) (*Server, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	// Redis client
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: cfg.Redis.Address,
-	})
-
-	// Test Redis connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		logger.Error().Err(err).Msg("Failed to connect to Redis, continuing without Redis")
-		// Don't fail startup if Redis is unavailable
-	}
+	// Initialize Redis cache layer (fail-open: logs warning if Redis is unavailable)
+	redisCache := cache.New(cfg, logger)
 
 	// job service
 	jobService := job.NewJobService(logger, cfg)
@@ -62,7 +50,7 @@ func New(cfg *config.Config, logger *zerolog.Logger) (*Server, error) {
 		Config: cfg,
 		Logger: logger,
 		DB:     db,
-		Redis:  redisClient,
+		Cache:  redisCache,
 		Job:    jobService,
 	}
 
@@ -99,6 +87,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	if err := s.DB.Close(); err != nil {
 		return fmt.Errorf("failed to close database connection: %w", err)
+	}
+
+	if s.Cache != nil {
+		if err := s.Cache.Close(); err != nil {
+			s.Logger.Warn().Err(err).Msg("failed to close Redis cache")
+		}
 	}
 
 	if s.Job != nil {

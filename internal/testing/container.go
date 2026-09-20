@@ -92,7 +92,10 @@ func SetupTestDB(t *testing.T) (*TestDB, func()) {
 			ResendAPIKey: "test-key",
 		},
 		Redis: config.RedisConfig{
-			Address: "localhost:6379",
+			Address:    "localhost:6379",
+			Mode:       "single",
+			PoolSize:   10,
+			DefaultTTL: 5 * 60e9, // 5m in nanoseconds
 		},
 		Auth: config.AuthConfig{
 			SecretKey: "test-secret",
