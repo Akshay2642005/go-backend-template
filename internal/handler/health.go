@@ -61,23 +61,35 @@ func (h *HealthHandler) CheckHealth(c echo.Context) error {
 
 	// Check Redis connectivity
 	if h.server.Cache != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		redisStart := time.Now()
-		if err := h.server.Cache.Ping(ctx); err != nil {
+		// Check circuit breaker state first
+		if h.server.Cache.Breaker().State() != 0 { // not StateClosed
 			checks["redis"] = map[string]interface{}{
 				"status":        "unhealthy",
-				"response_time": time.Since(redisStart).String(),
-				"error":         err.Error(),
+				"response_time": "0s",
+				"error":         "circuit breaker is " + h.server.Cache.Breaker().State().String(),
 			}
-			logger.Error().Err(err).Dur("response_time", time.Since(redisStart)).Msg("redis health check failed")
+			logger.Warn().Str("breaker_state", h.server.Cache.Breaker().State().String()).Msg("redis circuit breaker is open")
 		} else {
-			checks["redis"] = map[string]interface{}{
-				"status":        "healthy",
-				"response_time": time.Since(redisStart).String(),
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			redisStart := time.Now()
+			if err := h.server.Cache.Ping(ctx); err != nil {
+				h.server.Cache.Breaker().Failure()
+				checks["redis"] = map[string]interface{}{
+					"status":        "unhealthy",
+					"response_time": time.Since(redisStart).String(),
+					"error":         err.Error(),
+				}
+				logger.Error().Err(err).Dur("response_time", time.Since(redisStart)).Msg("redis health check failed")
+			} else {
+				h.server.Cache.Breaker().Success()
+				checks["redis"] = map[string]interface{}{
+					"status":        "healthy",
+					"response_time": time.Since(redisStart).String(),
+				}
+				logger.Info().Dur("response_time", time.Since(redisStart)).Msg("redis health check passed")
 			}
-			logger.Info().Dur("response_time", time.Since(redisStart)).Msg("redis health check passed")
 		}
 	}
 

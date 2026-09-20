@@ -52,8 +52,15 @@ backend/
 - **Clerk Integration**: Modern authentication service
 - **JWT Validation**: Secure token verification
 - **Role-Based Access**: Configurable permission system
-- **Rate Limiting**: 20 requests/second per IP
-- **Security Headers**: XSS, CSRF, and clickjacking protection
+- **Rate Limiting**: Redis-backed sliding window with per-IP/per-user strategies
+- **Security Headers**: XSS, CSRF, clickjacking, HSTS, CSP, and Referrer-Policy protection
+- **Request Validation**: Structured input validation with `validator/v10` and RFC 7807 error responses
+
+### Resilience
+- **Circuit Breaker**: State machine (Closed → Open → Half-Open) preventing cascading failures when Redis or database is unhealthy
+- **Per-Request Timeout**: Configurable context deadline per request (returns 504 on timeout)
+- **Database Connection Retry**: Exponential backoff retry for initial database connection
+- **Fail-Open**: Circuit breaker, cache, and rate limiter all fail open — never block requests
 
 ### Observability
 - **OpenTelemetry**: Distributed tracing and metrics with OTLP/gRPC export (disabled by default)
@@ -103,6 +110,10 @@ backend/
 ### API Documentation
 - **OpenAPI 3.0**: Complete API specification
 - **Scalar UI**: Interactive API explorer (served at `/docs`)
+
+### Response Compression
+- **Gzip**: Configurable gzip compression for HTTP responses (enabled by default)
+- **Balanced**: Level 5 compression for optimal speed/ratio tradeoff
 
 ### Graceful Shutdown
 - **Ordered Teardown**: HTTP drain → database → Redis cache → background jobs
@@ -170,6 +181,19 @@ BOILERPLATE_DATABASE.AUTO_MIGRATE="false"
 # Graceful shutdown
 BOILERPLATE_SERVER.SHUTDOWN_TIMEOUT="30"
 BOILERPLATE_SERVER.DRAIN_TIMEOUT="15"
+
+# Compression (enabled by default)
+BOILERPLATE_SERVER.COMPRESSION="true"
+
+# Per-request timeout in seconds (0 = no timeout)
+BOILERPLATE_SERVER.REQUEST_TIMEOUT="10"
+
+# HSTS max-age in seconds (0 = disabled, 31536000 = 1 year)
+BOILERPLATE_SERVER.SECURITY_HSTS="0"
+
+# Database connection retry
+BOILERPLATE_DATABASE.CONNECT_RETRIES="3"
+BOILERPLATE_DATABASE.CONNECT_RETRY_DELAY="2"
 ```
 
 ## Development

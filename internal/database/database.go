@@ -53,9 +53,45 @@ func New(cfg *config.Config, logger *zerolog.Logger) (*Database, error) {
 		pgxPoolConfig.ConnConfig.Tracer = localTracer
 	}
 
-	pool, err := pgxpool.NewWithConfig(context.Background(), pgxPoolConfig)
+	// Connect with optional retry
+	retries := cfg.Database.ConnectRetries
+	if retries < 0 {
+		retries = 0
+	}
+	retryDelay := time.Duration(cfg.Database.ConnectRetryDelay) * time.Second
+	if retryDelay <= 0 {
+		retryDelay = 1 * time.Second
+	}
+
+	var pool *pgxpool.Pool
+	for attempt := 0; attempt <= retries; attempt++ {
+		pool, err = pgxpool.NewWithConfig(context.Background(), pgxPoolConfig)
+		if err != nil {
+			if attempt < retries {
+				logger.Warn().Err(err).Int("attempt", attempt+1).Int("max", retries).Dur("delay", retryDelay).Msg("database connection failed, retrying")
+				time.Sleep(retryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("failed to create pgx pool after %d attempts: %w", attempt+1, err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), DatabasePingTimeout*time.Second)
+		err = pool.Ping(ctx)
+		cancel()
+
+		if err == nil {
+			break
+		}
+
+		pool.Close()
+		if attempt < retries {
+			logger.Warn().Err(err).Int("attempt", attempt+1).Int("max", retries).Dur("delay", retryDelay).Msg("database ping failed, retrying")
+			time.Sleep(retryDelay)
+		}
+	}
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to create pgx pool: %w", err)
+		return nil, fmt.Errorf("failed to ping database after %d attempts: %w", retries+1, err)
 	}
 
 	database := &Database{
@@ -63,14 +99,7 @@ func New(cfg *config.Config, logger *zerolog.Logger) (*Database, error) {
 		log:  logger,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), DatabasePingTimeout*time.Second)
-	defer cancel()
-	if err = pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
 	logger.Info().Msg("connected to the database")
-
 	return database, nil
 }
 

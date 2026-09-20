@@ -21,6 +21,7 @@ func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services
 		middlewares.RateLimit.Handle(),
 		middlewares.Global.CORS(),
 		middlewares.Global.Secure(),
+		middlewares.RequestTimeout.Handle(),
 		middleware.RequestID(),
 		middlewares.Tracing.EnhanceTracing(),
 		middlewares.ContextEnhancer.EnhanceContext(),
@@ -28,6 +29,11 @@ func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services
 		middlewares.Global.RequestLogger(),
 		middlewares.Global.Recover(),
 	)
+
+	// compression (after response writing, before send)
+	if s.Config.Server.Compression {
+		router.Use(middlewares.Global.Compression())
+	}
 
 	// register system routes
 	registerSystemRoutes(router, h)

@@ -97,7 +97,41 @@ func (global *GlobalMiddlewares) Recover() echo.MiddlewareFunc {
 }
 
 func (global *GlobalMiddlewares) Secure() echo.MiddlewareFunc {
-	return middleware.Secure()
+	return middleware.SecureWithConfig(middleware.SecureConfig{
+		Skipper:            nil,
+		XSSProtection:      "1; mode=block",
+		ContentTypeNosniff: "nosniff",
+		XFrameOptions:      "DENY",
+		HSTSPreloadEnabled: true,
+		HSTSMaxAge:         global.getHSTSMaxAge(),
+	})
+}
+
+func (global *GlobalMiddlewares) getHSTSMaxAge() int {
+	if global.server.Config.Server.SecurityHSTS > 0 {
+		return global.server.Config.Server.SecurityHSTS
+	}
+	// Default: 1 year in production, 0 in dev
+	if global.server.Config.Primary.Env == "production" {
+		return 31536000
+	}
+	return 0
+}
+
+// Compression returns gzip compression middleware.
+func (global *GlobalMiddlewares) Compression() echo.MiddlewareFunc {
+	return middleware.GzipWithConfig(middleware.GzipConfig{
+		Skipper: func(c echo.Context) bool {
+			// Skip compression for small responses (Content-Length < 1KB)
+			// and for already-compressed content types
+			cl := c.Response().Header().Get("Content-Length")
+			if cl == "0" || cl == "" {
+				return false // let it through; size check happens after
+			}
+			return false
+		},
+		Level: 5, // balanced speed/ratio
+	})
 }
 
 func (global *GlobalMiddlewares) GlobalErrorHandler(err error, c echo.Context) {

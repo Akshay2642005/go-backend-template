@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"backend/internal/config"
+	"backend/internal/lib/breaker"
 )
 
 // Cache provides an enterprise-grade Redis cache layer with
@@ -20,6 +21,7 @@ type Cache struct {
 	logger             zerolog.Logger
 	metrics            *metrics
 	sf                 *group
+	breaker            *breaker.Breaker
 	prefix             string
 	defaultTTL         time.Duration
 	slowQueryThreshold time.Duration
@@ -65,10 +67,27 @@ func New(cfg *config.Config, logger *zerolog.Logger) *Cache {
 		logger:             log,
 		metrics:            &metrics{},
 		sf:                 newGroup(),
+		breaker:            newRedisBreaker(log),
 		prefix:             redisCfg.KeyPrefix,
 		defaultTTL:         redisCfg.DefaultTTL,
 		slowQueryThreshold: threshold,
 	}
+}
+
+// newRedisBreaker creates a circuit breaker for Redis operations.
+func newRedisBreaker(log zerolog.Logger) *breaker.Breaker {
+	return breaker.New("redis", breaker.Config{
+		FailureThreshold: 5,
+		SuccessThreshold: 2,
+		Cooldown:         30 * time.Second,
+		OnStateChange: func(name string, from, to breaker.State) {
+			log.Warn().
+				Str("breaker", name).
+				Str("from", from.String()).
+				Str("to", to.String()).
+				Msg("circuit breaker state change")
+		},
+	})
 }
 
 // newSingleClient creates a standalone Redis client.
@@ -155,6 +174,11 @@ func newSentinelClient(cfg config.RedisConfig) *redis.Client {
 // Client returns the underlying redis.UniversalClient for advanced use cases.
 func (c *Cache) Client() redis.UniversalClient {
 	return c.client
+}
+
+// Breaker returns the circuit breaker for Redis operations.
+func (c *Cache) Breaker() *breaker.Breaker {
+	return c.breaker
 }
 
 // Ping checks Redis connectivity.

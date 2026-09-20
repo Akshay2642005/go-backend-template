@@ -13,6 +13,7 @@ type Middlewares struct {
 	Metrics         *MetricsMiddleware
 	CacheControl    *CacheControlMiddleware
 	Idempotency     *idempotencyMiddleware
+	RequestTimeout  *RequestTimeoutMiddleware
 }
 
 func NewMiddlewares(s *server.Server) *Middlewares {
@@ -25,5 +26,6 @@ func NewMiddlewares(s *server.Server) *Middlewares {
 		Metrics:         NewMetricsMiddleware(s),
 		CacheControl:    NewCacheControlMiddleware(s, CacheControlConfig{}),
 		Idempotency:     NewIdempotencyMiddleware(s, IdempotencyConfig{}),
+		RequestTimeout:  NewRequestTimeoutMiddleware(s),
 	}
 }

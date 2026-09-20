@@ -37,6 +37,9 @@ type ServerConfig struct {
 	Idempotency        IdempotencyConfig `koanf:"idempotency"`
 	ShutdownTimeout    int               `koanf:"shutdown_timeout"`
 	DrainTimeout       int               `koanf:"drain_timeout"`
+	Compression        bool              `koanf:"compression"`
+	RequestTimeout     int               `koanf:"request_timeout"`
+	SecurityHSTS       int               `koanf:"security_hsts"`
 }
 
 type RateLimitConfig struct {
@@ -55,17 +58,19 @@ type IdempotencyConfig struct {
 }
 
 type DatabaseConfig struct {
-	Host            string `koanf:"host" validate:"required"`
-	Port            int    `koanf:"port" validate:"required"`
-	User            string `koanf:"user" validate:"required"`
-	Password        string `koanf:"password"`
-	Name            string `koanf:"name" validate:"required"`
-	SSLMode         string `koanf:"ssl_mode" validate:"required"`
-	MaxOpenConns    int    `koanf:"max_open_conns" validate:"required"`
-	MaxIdleConns    int    `koanf:"max_idle_conns" validate:"required"`
-	ConnMaxLifetime int    `koanf:"conn_max_lifetime" validate:"required"`
-	ConnMaxIdleTime int    `koanf:"conn_max_idle_time" validate:"required"`
-	AutoMigrate     bool   `koanf:"auto_migrate"`
+	Host              string `koanf:"host" validate:"required"`
+	Port              int    `koanf:"port" validate:"required"`
+	User              string `koanf:"user" validate:"required"`
+	Password          string `koanf:"password"`
+	Name              string `koanf:"name" validate:"required"`
+	SSLMode           string `koanf:"ssl_mode" validate:"required"`
+	MaxOpenConns      int    `koanf:"max_open_conns" validate:"required"`
+	MaxIdleConns      int    `koanf:"max_idle_conns" validate:"required"`
+	ConnMaxLifetime   int    `koanf:"conn_max_lifetime" validate:"required"`
+	ConnMaxIdleTime   int    `koanf:"conn_max_idle_time" validate:"required"`
+	AutoMigrate       bool   `koanf:"auto_migrate"`
+	ConnectRetries    int    `koanf:"connect_retries"`
+	ConnectRetryDelay int    `koanf:"connect_retry_delay"`
 }
 
 type RedisConfig struct {
