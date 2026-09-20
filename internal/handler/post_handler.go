@@ -28,7 +28,7 @@ func NewPostHandler(s *server.Server, postService *service.PostService) *PostHan
 
 // List returns a paginated list of posts.
 func (h *PostHandler) List(c echo.Context) error {
-	return HandleFunc(h.Handler, func(ctx context.Context, req *model.ListPostsRequest) (interface{}, error) {
+	return Handle(h.Handler, func(ctx context.Context, req *model.ListPostsRequest) (interface{}, error) {
 		posts, total, err := h.postService.List(ctx, *req)
 		if err != nil {
 			return nil, err
@@ -76,7 +76,7 @@ func (h *PostHandler) GetByID(c echo.Context) error {
 
 // Create creates a new post.
 func (h *PostHandler) Create(c echo.Context) error {
-	return HandleFunc(h.Handler, func(ctx context.Context, req *model.CreatePostRequest) (interface{}, error) {
+	return Handle(h.Handler, func(ctx context.Context, req *model.CreatePostRequest) (interface{}, error) {
 		post, err := h.postService.Create(ctx, *req)
 		if err != nil {
 			return nil, err
@@ -93,7 +93,7 @@ func (h *PostHandler) Update(c echo.Context) error {
 		return errs.NewBadRequestError("invalid post ID", false, nil, nil, nil)
 	}
 
-	return HandleFunc(h.Handler, func(ctx context.Context, req *model.UpdatePostRequest) (interface{}, error) {
+	return Handle(h.Handler, func(ctx context.Context, req *model.UpdatePostRequest) (interface{}, error) {
 		post, err := h.postService.Update(ctx, id, *req)
 		if err != nil {
 			return nil, err

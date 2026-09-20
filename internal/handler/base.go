@@ -21,16 +21,14 @@ func NewHandler(s *server.Server) Handler {
 	return Handler{server: s}
 }
 
-// HandlerFunc represents a typed handler function that processes a request and returns a response
-type HandlerFunc[Req validation.Validatable, Res any] func(c echo.Context, req Req) (Res, error)
+// HandlerFunc represents a typed handler function that receives
+// context.Context (with propagated values) instead of echo.Context.
+// The request context is extracted internally, so closures never
+// touch echo directly for request-scoped data.
+type HandlerFunc[Req validation.Validatable, Res any] func(ctx context.Context, req Req) (Res, error)
 
 // HandlerFuncNoContent represents a typed handler function that processes a request without returning content
-type HandlerFuncNoContent[Req validation.Validatable] func(c echo.Context, req Req) error
-
-// CtxHandlerFunc is like HandlerFunc but receives context.Context instead of
-// echo.Context. The request context (with propagated values) is extracted
-// internally, so closures never touch echo directly.
-type CtxHandlerFunc[Req validation.Validatable, Res any] func(ctx context.Context, req Req) (Res, error)
+type HandlerFuncNoContent[Req validation.Validatable] func(ctx context.Context, req Req) error
 
 // ResponseHandler defines the interface for handling different response types
 type ResponseHandler interface {
@@ -158,27 +156,13 @@ func handleRequest[Req validation.Validatable](
 	return responseHandler.Handle(c, result)
 }
 
-// Handle wraps a handler with validation, error handling, logging, and metrics
+// Handle wraps a context-based handler with validation, error handling,
+// logging, and metrics. The closure receives context.Context (with
+// propagated values) instead of echo.Context, so handlers never touch
+// echo directly for request-scoped data.
 func Handle[Req validation.Validatable, Res any](
 	h Handler,
 	handler HandlerFunc[Req, Res],
-	status int,
-	req Req,
-) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		return handleRequest(c, req, func(c echo.Context, req Req) (interface{}, error) {
-			return handler(c, req)
-		}, JSONResponseHandler{status: status})
-	}
-}
-
-// HandleFunc wraps a context-based handler with validation, error handling,
-// logging, and metrics. Unlike Handle, the closure receives context.Context
-// (with propagated values) instead of echo.Context, so handlers never touch
-// echo directly for request-scoped data.
-func HandleFunc[Req validation.Validatable, Res any](
-	h Handler,
-	handler CtxHandlerFunc[Req, Res],
 	status int,
 	req Req,
 ) echo.HandlerFunc {
@@ -198,8 +182,8 @@ func HandleFile[Req validation.Validatable](
 	contentType string,
 ) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		return handleRequest(c, req, func(c echo.Context, req Req) (interface{}, error) {
-			return handler(c, req)
+		return handleRequest(c, req, func(_ echo.Context, req Req) (interface{}, error) {
+			return handler(c.Request().Context(), req)
 		}, FileResponseHandler{
 			status:      status,
 			filename:    filename,
@@ -216,8 +200,8 @@ func HandleNoContent[Req validation.Validatable](
 	req Req,
 ) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		return handleRequest(c, req, func(c echo.Context, req Req) (interface{}, error) {
-			err := handler(c, req)
+		return handleRequest(c, req, func(_ echo.Context, req Req) (interface{}, error) {
+			err := handler(c.Request().Context(), req)
 			return nil, err
 		}, NoContentResponseHandler{status: status})
 	}
