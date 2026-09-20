@@ -23,6 +23,13 @@ func Init(ctx context.Context, cfg *config.ObservabilityConfig, serviceName stri
 		return func(context.Context) error { return nil }, nil
 	}
 
+	// Fail fast on misconfiguration. The OTLP gRPC client dials lazily,
+	// so without this check an empty endpoint would silently produce
+	// a tracer that drops every span. Mirrors ObservabilityConfig.Validate.
+	if cfg.Tracing.Endpoint == "" {
+		return nil, fmt.Errorf("tracing enabled but no endpoint configured")
+	}
+
 	// Set up the OTLP gRPC exporter
 	opts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(cfg.Tracing.Endpoint),
