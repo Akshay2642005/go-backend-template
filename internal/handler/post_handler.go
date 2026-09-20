@@ -52,12 +52,12 @@ func (h *PostHandler) list(c echo.Context, req *model.ListPostsRequest) (interfa
 		data[i] = model.PostFromModel(&p)
 	}
 
-	return map[string]interface{}{
-		"data":        data,
-		"page":        page,
-		"limit":       limit,
-		"total":       total,
-		"total_pages": (total + limit - 1) / limit,
+	return model.PaginatedResponse[model.PostResponse]{
+		Data:       data,
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: (total + limit - 1) / limit,
 	}, nil
 }
 

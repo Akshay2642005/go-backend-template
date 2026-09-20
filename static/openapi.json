@@ -141,9 +141,9 @@
                     "page": { "type": "integer" },
                     "limit": { "type": "integer" },
                     "total": { "type": "integer" },
-                    "total_pages": { "type": "integer" }
+                    "totalPages": { "type": "integer" }
                   },
-                  "required": ["data", "page", "limit", "total", "total_pages"]
+                  "required": ["data", "page", "limit", "total", "totalPages"]
                 }
               }
             }
