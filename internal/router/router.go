@@ -50,7 +50,7 @@ func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services
 	api.Use(middlewares.Idempotency.Handle())
 
 	// register post routes (example CRUD)
-	registerPostRoutes(api, s, h, s.DB.Pool)
+	registerPostRoutes(api, s, h)
 
 	return router
 }

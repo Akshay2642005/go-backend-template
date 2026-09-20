@@ -3,7 +3,6 @@ package handler
 import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"backend/internal/errs"
 	"backend/internal/middleware"
@@ -19,10 +18,10 @@ type PostHandler struct {
 }
 
 // NewPostHandler creates a new PostHandler.
-func NewPostHandler(s *server.Server, pool *pgxpool.Pool) *PostHandler {
+func NewPostHandler(s *server.Server, postService *service.PostService) *PostHandler {
 	return &PostHandler{
 		Handler:     NewHandler(s),
-		postService: service.NewPostService(pool),
+		postService: postService,
 	}
 }
 

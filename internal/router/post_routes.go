@@ -2,22 +2,19 @@ package router
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"backend/internal/handler"
 	"backend/internal/middleware"
 	"backend/internal/server"
 )
 
-func registerPostRoutes(api *echo.Group, s *server.Server, h *handler.Handlers, pool *pgxpool.Pool) {
-	postHandler := handler.NewPostHandler(s, pool)
-
+func registerPostRoutes(api *echo.Group, s *server.Server, h *handler.Handlers) {
 	posts := api.Group("/posts")
 	posts.Use(middleware.NewAuthMiddleware(s).RequireAuth)
 
-	posts.GET("", postHandler.List)
-	posts.GET("/:id", postHandler.GetByID)
-	posts.POST("", postHandler.Create)
-	posts.PUT("/:id", postHandler.Update)
-	posts.DELETE("/:id", postHandler.Delete)
+	posts.GET("", h.Post.List)
+	posts.GET("/:id", h.Post.GetByID)
+	posts.POST("", h.Post.Create)
+	posts.PUT("/:id", h.Post.Update)
+	posts.DELETE("/:id", h.Post.Delete)
 }

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"backend/internal/errs"
 	"backend/internal/model"
@@ -18,9 +17,9 @@ type PostService struct {
 }
 
 // NewPostService creates a new PostService.
-func NewPostService(pool *pgxpool.Pool) *PostService {
+func NewPostService(repo *repository.PostRepository) *PostService {
 	return &PostService{
-		repo: repository.NewPostRepository(pool),
+		repo: repo,
 	}
 }
 
