@@ -68,7 +68,8 @@ backend/
 - **Request Tracing**: Automatic span creation and context propagation for HTTP requests
 - **Request Metrics**: `http.server.request.duration` histogram, `http.server.request.count` counter with method/status/route labels
 - **Cache Metrics**: `cache.operation.count` with hit/miss status
-- **Health Checks**: Readiness and liveness endpoints (database + Redis)
+- **Health Checks**: `/healthz` (liveness), `/readyz` (readiness), `/status` (full details)
+- **Request/Response Body Logging**: Optional debug-level logging with 1 KB truncation (disabled by default)
 - **Fail-Open**: Observability failures never block requests
 
 ### Rate Limiting
@@ -91,6 +92,7 @@ backend/
 - **Job Scheduling**: Cron-like task scheduling
 - **Retry Logic**: Exponential backoff for failed jobs
 - **Job Monitoring**: Real-time job status tracking
+- **Context Propagation**: Request metadata (request ID, user ID, trace ID) automatically propagated from HTTP handlers to background jobs via payload envelope
 
 ### Cache Control
 - **Enterprise Redis**: Single, cluster, and sentinel topology support via `redis.UniversalClient`
@@ -110,6 +112,13 @@ backend/
 ### API Documentation
 - **OpenAPI 3.0**: Complete API specification
 - **Scalar UI**: Interactive API explorer (served at `/docs`)
+
+### CRUD Example (Posts)
+- **Full Stack**: Handler → Service → Repository → Model pattern demonstrated with a Posts resource
+- **Clerk User Integration**: `author_id` extracted from Clerk JWT (no foreign key to users table)
+- **Pagination**: Configurable page/limit with total count
+- **Status Filtering**: Draft/published/archived post states
+- **Migration Example**: `002_posts.sql` shows the migration pattern
 
 ### Response Compression
 - **Gzip**: Configurable gzip compression for HTTP responses (enabled by default)
@@ -194,6 +203,9 @@ BOILERPLATE_SERVER.SECURITY_HSTS="0"
 # Database connection retry
 BOILERPLATE_DATABASE.CONNECT_RETRIES="3"
 BOILERPLATE_DATABASE.CONNECT_RETRY_DELAY="2"
+
+# Request/response body logging (disabled by default, truncates at 1 KB)
+BOILERPLATE_SERVER.REQUEST_BODY_LOG="false"
 ```
 
 ## Development

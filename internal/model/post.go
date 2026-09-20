@@ -1,0 +1,75 @@
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// PostStatus represents the lifecycle state of a post.
+type PostStatus string
+
+const (
+	PostStatusDraft     PostStatus = "draft"
+	PostStatusPublished PostStatus = "published"
+	PostStatusArchived  PostStatus = "archived"
+)
+
+// Post represents a blog post or article.
+type Post struct {
+	Base
+	Title     string     `json:"title" db:"title"`
+	Content   string     `json:"content" db:"content"`
+	Status    PostStatus `json:"status" db:"status"`
+	AuthorID  string     `json:"author_id" db:"author_id"`
+}
+
+// CreatePostRequest is the request body for creating a post.
+type CreatePostRequest struct {
+	Title   string `json:"title" validate:"required,min=3,max=200"`
+	Content string `json:"content" validate:"required"`
+	Status  string `json:"status" validate:"omitempty,oneof=draft published archived"`
+}
+
+func (r CreatePostRequest) Validate() error { return nil }
+
+// UpdatePostRequest is the request body for updating a post.
+type UpdatePostRequest struct {
+	Title   string `json:"title" validate:"omitempty,min=3,max=200"`
+	Content string `json:"content" validate:"omitempty"`
+	Status  string `json:"status" validate:"omitempty,oneof=draft published archived"`
+}
+
+func (r UpdatePostRequest) Validate() error { return nil }
+
+// ListPostsRequest is the request query parameters for listing posts.
+type ListPostsRequest struct {
+	Page   int    `query:"page" validate:"omitempty,min=1"`
+	Limit  int    `query:"limit" validate:"omitempty,min=1,max=100"`
+	Status string `query:"status" validate:"omitempty,oneof=draft published archived"`
+}
+
+func (r ListPostsRequest) Validate() error { return nil }
+
+// PostResponse is the response body for a single post.
+type PostResponse struct {
+	ID        uuid.UUID  `json:"id"`
+	Title     string     `json:"title"`
+	Content   string     `json:"content"`
+	Status    PostStatus `json:"status"`
+	AuthorID  string     `json:"author_id"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+func PostFromModel(p *Post) PostResponse {
+	return PostResponse{
+		ID:        p.ID,
+		Title:     p.Title,
+		Content:   p.Content,
+		Status:    p.Status,
+		AuthorID:  p.AuthorID,
+		CreatedAt: p.CreatedAt,
+		UpdatedAt: p.UpdatedAt,
+	}
+}

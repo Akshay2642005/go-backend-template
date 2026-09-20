@@ -19,8 +19,11 @@ func (j *JobService) InitHandlers(config *config.Config, logger *zerolog.Logger)
 }
 
 func (j *JobService) handleWelcomeEmailTask(ctx context.Context, t *asynq.Task) error {
+	// Extract request metadata from the task envelope
+	ctx, rawPayload := ExtractMetadata(ctx, t)
+
 	var p WelcomeEmailPayload
-	if err := json.Unmarshal(t.Payload(), &p); err != nil {
+	if err := json.Unmarshal(rawPayload, &p); err != nil {
 		return fmt.Errorf("failed to unmarshal welcome email payload: %w", err)
 	}
 

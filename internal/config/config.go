@@ -40,6 +40,7 @@ type ServerConfig struct {
 	Compression        bool              `koanf:"compression"`
 	RequestTimeout     int               `koanf:"request_timeout"`
 	SecurityHSTS       int               `koanf:"security_hsts"`
+	RequestBodyLog     bool              `koanf:"request_body_log"`
 }
 
 type RateLimitConfig struct {

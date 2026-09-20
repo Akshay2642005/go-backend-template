@@ -1,57 +1,22 @@
 package middleware
 
-import "context"
+import (
+	"backend/internal/contextutil"
+)
 
-type propagationKey struct{}
+// Re-export contextutil types for backward compatibility.
+// New code should import contextutil directly.
 
-// PropagatedValues holds request-scoped values that are injected into
-// context.Context for use in service, repository, and background job layers.
-type PropagatedValues struct {
-	RequestID string
-	UserID    string
-	TraceID   string
-	SpanID    string
-}
+type PropagatedValues = contextutil.PropagatedValues
 
-// WithPropagatedValues injects propagated values into the context.
-func WithPropagatedValues(ctx context.Context, v *PropagatedValues) context.Context {
-	return context.WithValue(ctx, propagationKey{}, v)
-}
+var (
+	WithPropagatedValues   = contextutil.WithPropagatedValues
+	PropagatedValuesFrom   = contextutil.PropagatedValuesFrom
+	RequestIDFrom          = contextutil.RequestIDFrom
+	UserIDFrom             = contextutil.UserIDFrom
+	TraceIDFrom            = contextutil.TraceIDFrom
+	SpanIDFrom             = contextutil.SpanIDFrom
+)
 
-// PropagatedValuesFrom extracts propagated values from the context.
-func PropagatedValuesFrom(ctx context.Context) (*PropagatedValues, bool) {
-	v, ok := ctx.Value(propagationKey{}).(*PropagatedValues)
-	return v, ok
-}
-
-// RequestIDFrom extracts the request ID from the context.
-func RequestIDFrom(ctx context.Context) string {
-	if v, ok := PropagatedValuesFrom(ctx); ok {
-		return v.RequestID
-	}
-	return ""
-}
-
-// UserIDFrom extracts the user ID from the context.
-func UserIDFrom(ctx context.Context) string {
-	if v, ok := PropagatedValuesFrom(ctx); ok {
-		return v.UserID
-	}
-	return ""
-}
-
-// TraceIDFrom extracts the trace ID from the context.
-func TraceIDFrom(ctx context.Context) string {
-	if v, ok := PropagatedValuesFrom(ctx); ok {
-		return v.TraceID
-	}
-	return ""
-}
-
-// SpanIDFrom extracts the span ID from the context.
-func SpanIDFrom(ctx context.Context) string {
-	if v, ok := PropagatedValuesFrom(ctx); ok {
-		return v.SpanID
-	}
-	return ""
-}
+// Ensure the type alias works correctly at compile time.
+var _ PropagatedValues = contextutil.PropagatedValues{}

@@ -35,6 +35,12 @@ func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services
 		router.Use(middlewares.Global.Compression())
 	}
 
+	// request/response body logging (optional, controlled by config)
+	bodyLogger := middleware.NewBodyLogger(middleware.BodyLoggerConfig{
+		Enabled: s.Config.Server.RequestBodyLog,
+	})
+	router.Use(bodyLogger.Handle())
+
 	// register system routes
 	registerSystemRoutes(router, h)
 
@@ -42,6 +48,9 @@ func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services
 	api := router.Group("/api/v1")
 	api.Use(middlewares.CacheControl.Handle())
 	api.Use(middlewares.Idempotency.Handle())
+
+	// register post routes (example CRUD)
+	registerPostRoutes(api, s, h, s.DB.Pool)
 
 	return router
 }
