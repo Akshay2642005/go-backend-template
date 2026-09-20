@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
@@ -26,8 +28,8 @@ func NewPostHandler(s *server.Server, postService *service.PostService) *PostHan
 
 // List returns a paginated list of posts.
 func (h *PostHandler) List(c echo.Context) error {
-	return Handle(h.Handler, func(_ echo.Context, req *model.ListPostsRequest) (interface{}, error) {
-		posts, total, err := h.postService.List(c.Request().Context(), *req)
+	return HandleFunc(h.Handler, func(ctx context.Context, req *model.ListPostsRequest) (interface{}, error) {
+		posts, total, err := h.postService.List(ctx, *req)
 		if err != nil {
 			return nil, err
 		}
@@ -74,8 +76,8 @@ func (h *PostHandler) GetByID(c echo.Context) error {
 
 // Create creates a new post.
 func (h *PostHandler) Create(c echo.Context) error {
-	return Handle(h.Handler, func(_ echo.Context, req *model.CreatePostRequest) (interface{}, error) {
-		post, err := h.postService.Create(c.Request().Context(), *req)
+	return HandleFunc(h.Handler, func(ctx context.Context, req *model.CreatePostRequest) (interface{}, error) {
+		post, err := h.postService.Create(ctx, *req)
 		if err != nil {
 			return nil, err
 		}
@@ -91,8 +93,8 @@ func (h *PostHandler) Update(c echo.Context) error {
 		return errs.NewBadRequestError("invalid post ID", false, nil, nil, nil)
 	}
 
-	return Handle(h.Handler, func(_ echo.Context, req *model.UpdatePostRequest) (interface{}, error) {
-		post, err := h.postService.Update(c.Request().Context(), id, *req)
+	return HandleFunc(h.Handler, func(ctx context.Context, req *model.UpdatePostRequest) (interface{}, error) {
+		post, err := h.postService.Update(ctx, id, *req)
 		if err != nil {
 			return nil, err
 		}

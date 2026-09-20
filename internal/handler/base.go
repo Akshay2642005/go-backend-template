@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -25,6 +26,11 @@ type HandlerFunc[Req validation.Validatable, Res any] func(c echo.Context, req R
 
 // HandlerFuncNoContent represents a typed handler function that processes a request without returning content
 type HandlerFuncNoContent[Req validation.Validatable] func(c echo.Context, req Req) error
+
+// CtxHandlerFunc is like HandlerFunc but receives context.Context instead of
+// echo.Context. The request context (with propagated values) is extracted
+// internally, so closures never touch echo directly.
+type CtxHandlerFunc[Req validation.Validatable, Res any] func(ctx context.Context, req Req) (Res, error)
 
 // ResponseHandler defines the interface for handling different response types
 type ResponseHandler interface {
@@ -162,6 +168,23 @@ func Handle[Req validation.Validatable, Res any](
 	return func(c echo.Context) error {
 		return handleRequest(c, req, func(c echo.Context, req Req) (interface{}, error) {
 			return handler(c, req)
+		}, JSONResponseHandler{status: status})
+	}
+}
+
+// HandleFunc wraps a context-based handler with validation, error handling,
+// logging, and metrics. Unlike Handle, the closure receives context.Context
+// (with propagated values) instead of echo.Context, so handlers never touch
+// echo directly for request-scoped data.
+func HandleFunc[Req validation.Validatable, Res any](
+	h Handler,
+	handler CtxHandlerFunc[Req, Res],
+	status int,
+	req Req,
+) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		return handleRequest(c, req, func(_ echo.Context, req Req) (interface{}, error) {
+			return handler(c.Request().Context(), req)
 		}, JSONResponseHandler{status: status})
 	}
 }
