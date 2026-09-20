@@ -53,7 +53,15 @@ func (m *CacheControlMiddleware) Handle() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if c.Request().Method != http.MethodGet {
-				return next(c)
+				err := next(c)
+				// On successful writes, purge cached GET responses under
+				// this path so subsequent reads can't serve stale data.
+				// Best-effort: purge failures never fail the request.
+				if err == nil && m.server.Cache != nil &&
+					c.Response().Status >= 200 && c.Response().Status < 300 {
+					m.purgePath(c.Request().Context(), c.Path())
+				}
+				return err
 			}
 			for _, prefix := range m.config.SkipPaths {
 				if strings.HasPrefix(c.Path(), prefix) {
@@ -151,6 +159,35 @@ func (m *CacheControlMiddleware) buildKey(c echo.Context) string {
 		}
 	}
 	return cache.Key(m.config.KeyPrefix, parts...)
+}
+
+// purgePath deletes cached responses under path and, when path ends in a
+// route parameter (e.g. /api/v1/posts/:id), under its parent collection
+// too — so a PUT to a detail URL also refreshes list responses. Prefixes
+// are matched as strings, so keep collection paths distinctive.
+func (m *CacheControlMiddleware) purgePath(ctx context.Context, path string) {
+	prefixes := []string{m.config.KeyPrefix + ":" + path}
+	if parent := parentCollection(path); parent != "" {
+		prefixes = append(prefixes, m.config.KeyPrefix+":"+parent)
+	}
+	pctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	for _, p := range prefixes {
+		_ = cache.DeleteByPrefix(m.server.Cache, pctx, p)
+	}
+}
+
+// parentCollection returns the parent path when p ends in a route
+// parameter (":id"), or "" otherwise.
+func parentCollection(p string) string {
+	i := strings.LastIndex(p, "/")
+	if i <= 0 {
+		return ""
+	}
+	if strings.HasPrefix(p[i+1:], ":") {
+		return p[:i]
+	}
+	return ""
 }
 
 type cachedResponse struct {

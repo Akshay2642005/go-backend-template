@@ -42,6 +42,11 @@ type UpdatePostRequest struct {
 
 func (r UpdatePostRequest) Validate() error { return nil }
 
+// MaxListLimit caps page size for list endpoints. The request validation
+// tag enforces the same bound for HTTP callers; the service clamps
+// defensively so direct callers (jobs, future code) can't dump the table.
+const MaxListLimit = 100
+
 // ListPostsRequest is the request query parameters for listing posts.
 type ListPostsRequest struct {
 	Page   int    `query:"page" validate:"omitempty,min=1"`

@@ -78,9 +78,22 @@ func (s *PostService) List(ctx context.Context, req model.ListPostsRequest) ([]m
 	if limit <= 0 {
 		limit = 20
 	}
+	if limit > model.MaxListLimit {
+		limit = model.MaxListLimit
+	}
 	offset := (page - 1) * limit
 
 	return s.repo.List(ctx, limit, offset, req.Status)
+}
+
+// authorizePostAuthor ensures the caller owns the post. An empty user ID
+// never matches, so unauthenticated callers are denied by default.
+func authorizePostAuthor(ctx context.Context, post *model.Post) error {
+	userID := propagation.UserIDFrom(ctx)
+	if userID == "" || userID != post.AuthorID {
+		return errs.NewForbiddenError("you do not have permission to modify this post", false)
+	}
+	return nil
 }
 
 // Update modifies an existing post.
@@ -92,6 +105,9 @@ func (s *PostService) Update(ctx context.Context, id uuid.UUID, req model.Update
 	}
 	if existing == nil {
 		return nil, errs.ProblemNotFound("Post")
+	}
+	if err := authorizePostAuthor(ctx, existing); err != nil {
+		return nil, err
 	}
 
 	// Apply updates
@@ -115,10 +131,16 @@ func (s *PostService) Update(ctx context.Context, id uuid.UUID, req model.Update
 	return s.GetByID(ctx, id)
 }
 
-// Delete removes a post by ID.
+// Delete removes a post by ID. Returns 404 if the post does not exist.
+// Repository errors propagate so sqlerr maps infrastructure failures
+// to 5xx problems instead of masking them as 404s.
 func (s *PostService) Delete(ctx context.Context, id uuid.UUID) error {
-	if err := s.repo.Delete(ctx, id); err != nil {
-		return errs.ProblemNotFound("Post")
+	post, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
 	}
-	return nil
+	if err := authorizePostAuthor(ctx, post); err != nil {
+		return err
+	}
+	return s.repo.Delete(ctx, id)
 }
