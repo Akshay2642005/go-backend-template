@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"time"
 
 	"backend/internal/config"
 	"backend/internal/database"
@@ -18,8 +17,6 @@ import (
 	"backend/internal/server"
 	"backend/internal/service"
 )
-
-const DefaultContextTimeout = 30
 
 func main() {
 	cfg, err := config.LoadConfig()
@@ -35,7 +32,13 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to initialize OpenTelemetry")
 	}
 
-	if cfg.Primary.Env != "local" {
+	// Auto-migrate if configured (runs in any environment when enabled)
+	if cfg.Database.AutoMigrate {
+		log.Info().Msg("auto-migrate enabled, running database migrations")
+		if err := database.Migrate(context.Background(), &log, cfg); err != nil {
+			log.Fatal().Err(err).Msg("auto-migration failed")
+		}
+	} else if cfg.Primary.Env != "local" {
 		if err := database.Migrate(context.Background(), &log, cfg); err != nil {
 			log.Fatal().Err(err).Msg("failed to migrate database")
 		}
@@ -70,20 +73,25 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
+	// Wait for interrupt signal
 	<-ctx.Done()
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultContextTimeout*time.Second)
+	log.Info().Msg("interrupt received, starting graceful shutdown")
 
-	// Shutdown OpenTelemetry
-	if err := otelShutdown(ctx); err != nil {
+	// Use configured shutdown timeout instead of hardcoded value
+	shutdownTimeout := srv.GetShutdownTimeout()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+
+	// Shutdown OpenTelemetry first (flush pending traces/metrics)
+	if err := otelShutdown(shutdownCtx); err != nil {
 		log.Warn().Err(err).Msg("failed to shutdown OpenTelemetry")
 	}
 
-	if err = srv.Shutdown(ctx); err != nil {
+	// Shutdown server (ordered: HTTP drain → DB → cache → jobs)
+	if err = srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatal().Err(err).Msg("server forced to shutdown")
 	}
+
 	stop()
 	cancel()
-
 	log.Info().Msg("server exited properly")
 }

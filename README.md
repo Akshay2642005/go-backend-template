@@ -34,9 +34,19 @@ backend/
 
 ### Database
 - **PostgreSQL**: Primary database with pgx/v5 driver
-- **Migration System**: Tern for schema versioning
+- **Migration System**: Tern for schema versioning with auto-migrate option
 - **Connection Pooling**: Optimized for production workloads
-- **Transaction Support**: ACID compliance for critical operations
+- **Transaction Helpers**: `WithTx` for automatic commit/rollback with error handling
+- **Read-Only Transactions**: Support for read-only transaction isolation
+- **Querier Interface**: Abstracts pool vs transaction for testable repositories
+- **Context Propagation**: Transactions injectable via `context.Context`
+
+### Error Handling (RFC 7807)
+- **Problem Details**: All errors conform to RFC 7807 with `type`, `title`, `detail`, `instance`
+- **Content-Type**: `application/problem+json` for all error responses
+- **Request Tracing**: Every error includes the request ID in `instance` field
+- **Field-Level Errors**: Validation errors include per-field details
+- **Database Error Mapping**: pgx errors automatically converted to human-readable problems
 
 ### Authentication & Security
 - **Clerk Integration**: Modern authentication service
@@ -68,12 +78,6 @@ backend/
 - **Scoped by User**: Keys are scoped to user + method + path for isolation
 - **Configurable TTL**: Default 24h, adjustable per deployment
 
-### Database
-- **Transaction Helpers**: `WithTx` for automatic commit/rollback with error handling
-- **Read-Only Transactions**: Support for read-only transaction isolation
-- **Querier Interface**: Abstracts pool vs transaction for testable repositories
-- **Context Propagation**: Transactions injectable via `context.Context`
-
 ### Background Jobs
 - **Asynq**: Redis-based distributed task queue
 - **Priority Queues**: Critical, default, and low priority
@@ -99,6 +103,12 @@ backend/
 ### API Documentation
 - **OpenAPI 3.0**: Complete API specification
 - **Scalar UI**: Interactive API explorer (served at `/docs`)
+
+### Graceful Shutdown
+- **Ordered Teardown**: HTTP drain → database → Redis cache → background jobs
+- **Drain Period**: Configurable timeout for in-flight requests to complete (default 15s)
+- **Shutdown Timeout**: Total deadline for the entire shutdown sequence (default 30s)
+- **Structured Logging**: Each shutdown step logged for observability
 
 ## Getting Started
 
@@ -153,6 +163,13 @@ BOILERPLATE_SERVER.RATE_LIMIT.MAX="100"
 # Idempotency (disabled by default)
 BOILERPLATE_SERVER.IDEMPOTENCY.ENABLED="false"
 BOILERPLATE_SERVER.IDEMPOTENCY.TTL="24h"
+
+# Auto-migrate database on startup (disabled by default)
+BOILERPLATE_DATABASE.AUTO_MIGRATE="false"
+
+# Graceful shutdown
+BOILERPLATE_SERVER.SHUTDOWN_TIMEOUT="30"
+BOILERPLATE_SERVER.DRAIN_TIMEOUT="15"
 ```
 
 ## Development

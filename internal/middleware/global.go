@@ -120,45 +120,38 @@ func (global *GlobalMiddlewares) GlobalErrorHandler(err error, c echo.Context) {
 		}
 	}
 
-	// Now process the possibly converted error
+	// Now process the possibly converted error into an RFC 7807 problem
 	var echoErr *echo.HTTPError
-	var status int
-	var code string
-	var message string
-	var fieldErrors []errs.FieldError
-	var action *errs.Action
+	var problem *errs.HTTPError
 
 	switch {
 	case errors.As(err, &httpErr):
-		status = httpErr.Status
-		code = httpErr.Code
-		message = httpErr.Message
-		fieldErrors = httpErr.Errors
-		action = httpErr.Action
+		problem = httpErr
 
 	case errors.As(err, &echoErr):
-		status = echoErr.Code
-		code = errs.MakeUpperCaseWithUnderscores(http.StatusText(status))
-		if msg, ok := echoErr.Message.(string); ok {
-			message = msg
-		} else {
-			message = http.StatusText(echoErr.Code)
+		status := echoErr.Code
+		code := errs.MakeUpperCaseWithUnderscores(http.StatusText(status))
+		msg := http.StatusText(status)
+		if m, ok := echoErr.Message.(string); ok {
+			msg = m
 		}
+		problem = errs.NewProblemWithCode(status, code, http.StatusText(status), msg)
 
 	default:
-		status = http.StatusInternalServerError
-		code = errs.MakeUpperCaseWithUnderscores(
-			http.StatusText(http.StatusInternalServerError))
-		message = http.StatusText(http.StatusInternalServerError)
+		problem = errs.NewInternalServerError()
+	}
+
+	// Populate Instance with the request ID for traceability
+	if requestID := GetRequestID(c); requestID != "" {
+		problem.Instance = requestID
 	}
 
 	// Log the original error to help with debugging
-	// Use enhanced logger from context which already includes request_id, method, path, ip, user context
 	// 5xx are logged at error level; 4xx at warning level.
 	logger := *GetLogger(c)
 
 	var e *zerolog.Event
-	if status >= http.StatusInternalServerError {
+	if problem.Status >= http.StatusInternalServerError {
 		e = logger.Error().Stack()
 	} else {
 		e = logger.Warn().Stack()
@@ -166,18 +159,13 @@ func (global *GlobalMiddlewares) GlobalErrorHandler(err error, c echo.Context) {
 
 	e.
 		Err(originalErr).
-		Int("status", status).
-		Str("error_code", code).
-		Msg(message)
+		Int("status", problem.Status).
+		Str("error_code", problem.Code).
+		Str("error_type", problem.Type).
+		Msg(problem.Detail)
 
 	if !c.Response().Committed {
-		_ = c.JSON(status, errs.HTTPError{
-			Code:     code,
-			Message:  message,
-			Status:   status,
-			Override: httpErr != nil && httpErr.Override,
-			Errors:   fieldErrors,
-			Action:   action,
-		})
+		c.Response().Header().Set(echo.HeaderContentType, "application/problem+json")
+		_ = c.JSON(problem.Status, problem)
 	}
 }

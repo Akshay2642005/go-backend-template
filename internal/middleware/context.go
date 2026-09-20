@@ -37,10 +37,10 @@ func (ce *ContextEnhancer) EnhanceContext() echo.MiddlewareFunc {
 				Str("ip", c.RealIP()).
 				Logger()
 
-			// Trace context correlation (Sentry removed)
-
 			// Extract user information from JWT token or session
-			if userID := ce.extractUserID(c); userID != "" {
+			userID := ""
+			if uid := ce.extractUserID(c); uid != "" {
+				userID = uid
 				contextLogger = contextLogger.With().Str("user_id", userID).Logger()
 			}
 
@@ -51,8 +51,12 @@ func (ce *ContextEnhancer) EnhanceContext() echo.MiddlewareFunc {
 			// Store the enhanced logger in context
 			c.Set(LoggerKey, &contextLogger)
 
-			// Create a new context with the logger
+			// Inject propagated values into context.Context for downstream use
 			ctx := context.WithValue(c.Request().Context(), LoggerKey, &contextLogger)
+			ctx = WithPropagatedValues(ctx, &PropagatedValues{
+				RequestID: requestID,
+				UserID:    userID,
+			})
 			c.SetRequest(c.Request().WithContext(ctx))
 
 			return next(c)

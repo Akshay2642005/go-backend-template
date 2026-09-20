@@ -5,19 +5,27 @@ import (
 )
 
 func NewUnauthorizedError(message string, override bool) *HTTPError {
+	code := MakeUpperCaseWithUnderscores(http.StatusText(http.StatusUnauthorized))
 	return &HTTPError{
-		Code:     MakeUpperCaseWithUnderscores(http.StatusText(http.StatusUnauthorized)),
-		Message:  message,
+		Type:     ProblemURI(code),
+		Title:    http.StatusText(http.StatusUnauthorized),
 		Status:   http.StatusUnauthorized,
+		Detail:   message,
+		Message:  message,
+		Code:     code,
 		Override: override,
 	}
 }
 
 func NewForbiddenError(message string, override bool) *HTTPError {
+	code := MakeUpperCaseWithUnderscores(http.StatusText(http.StatusForbidden))
 	return &HTTPError{
-		Code:     MakeUpperCaseWithUnderscores(http.StatusText(http.StatusForbidden)),
-		Message:  message,
+		Type:     ProblemURI(code),
+		Title:    http.StatusText(http.StatusForbidden),
 		Status:   http.StatusForbidden,
+		Detail:   message,
+		Message:  message,
+		Code:     code,
 		Override: override,
 	}
 }
@@ -30,9 +38,12 @@ func NewBadRequestError(message string, override bool, code *string, errors []Fi
 	}
 
 	return &HTTPError{
-		Code:     formattedCode,
-		Message:  message,
+		Type:     ProblemURI(formattedCode),
+		Title:    http.StatusText(http.StatusBadRequest),
 		Status:   http.StatusBadRequest,
+		Detail:   message,
+		Message:  message,
+		Code:     formattedCode,
 		Override: override,
 		Errors:   errors,
 		Action:   action,
@@ -47,22 +58,31 @@ func NewNotFoundError(message string, override bool, code *string) *HTTPError {
 	}
 
 	return &HTTPError{
-		Code:     formattedCode,
-		Message:  message,
+		Type:     ProblemURI(formattedCode),
+		Title:    http.StatusText(http.StatusNotFound),
 		Status:   http.StatusNotFound,
+		Detail:   message,
+		Message:  message,
+		Code:     formattedCode,
 		Override: override,
 	}
 }
 
 func NewInternalServerError() *HTTPError {
+	code := MakeUpperCaseWithUnderscores(http.StatusText(http.StatusInternalServerError))
 	return &HTTPError{
-		Code:     MakeUpperCaseWithUnderscores(http.StatusText(http.StatusInternalServerError)),
-		Message:  http.StatusText(http.StatusInternalServerError),
-		Status:   http.StatusInternalServerError,
-		Override: false,
+		Type:    ProblemURI(code),
+		Title:   http.StatusText(http.StatusInternalServerError),
+		Status:  http.StatusInternalServerError,
+		Detail:  "An internal server error occurred",
+		Message: http.StatusText(http.StatusInternalServerError),
+		Code:    code,
 	}
 }
 
 func ValidationError(err error) *HTTPError {
-	return NewBadRequestError("Validation failed: "+err.Error(), false, nil, nil, nil)
+	e := NewBadRequestError("Validation failed: "+err.Error(), false, nil, nil, nil)
+	e.Title = "Validation Error"
+	e.Type = ProblemURI("VALIDATION_ERROR")
+	return e
 }

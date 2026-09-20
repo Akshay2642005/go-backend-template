@@ -80,24 +80,67 @@ func (s *Server) Start() error {
 	return s.httpServer.ListenAndServe()
 }
 
+// Shutdown performs an ordered graceful shutdown:
+// 1. Stop accepting new HTTP connections and drain in-flight requests
+// 2. Close database connection pool
+// 3. Close Redis cache
+// 4. Stop background jobs
 func (s *Server) Shutdown(ctx context.Context) error {
-	if err := s.httpServer.Shutdown(ctx); err != nil {
-		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
-	}
+	s.Logger.Info().Msg("shutdown initiated")
 
+	drainTimeout := s.getDrainTimeout()
+	drainCtx, drainCancel := context.WithTimeout(ctx, drainTimeout)
+	defer drainCancel()
+
+	// Step 1: Drain HTTP connections
+	s.Logger.Info().Dur("timeout", drainTimeout).Msg("draining HTTP connections")
+	if err := s.httpServer.Shutdown(drainCtx); err != nil {
+		s.Logger.Error().Err(err).Msg("failed to drain HTTP connections")
+		return fmt.Errorf("failed to drain HTTP server: %w", err)
+	}
+	s.Logger.Info().Msg("HTTP connections drained")
+
+	// Step 2: Close database
+	s.Logger.Info().Msg("closing database connections")
 	if err := s.DB.Close(); err != nil {
-		return fmt.Errorf("failed to close database connection: %w", err)
+		s.Logger.Error().Err(err).Msg("failed to close database")
+		return fmt.Errorf("failed to close database: %w", err)
 	}
+	s.Logger.Info().Msg("database connections closed")
 
+	// Step 3: Close Redis cache
 	if s.Cache != nil {
+		s.Logger.Info().Msg("closing Redis cache")
 		if err := s.Cache.Close(); err != nil {
 			s.Logger.Warn().Err(err).Msg("failed to close Redis cache")
+		} else {
+			s.Logger.Info().Msg("Redis cache closed")
 		}
 	}
 
+	// Step 4: Stop background jobs
 	if s.Job != nil {
+		s.Logger.Info().Msg("stopping background jobs")
 		s.Job.Stop()
+		s.Logger.Info().Msg("background jobs stopped")
 	}
 
+	s.Logger.Info().Msg("shutdown complete")
 	return nil
+}
+
+// getDrainTimeout returns the configured drain timeout or a sensible default.
+func (s *Server) getDrainTimeout() time.Duration {
+	if s.Config.Server.DrainTimeout > 0 {
+		return time.Duration(s.Config.Server.DrainTimeout) * time.Second
+	}
+	return 15 * time.Second
+}
+
+// GetShutdownTimeout returns the configured shutdown timeout or a sensible default.
+func (s *Server) GetShutdownTimeout() time.Duration {
+	if s.Config.Server.ShutdownTimeout > 0 {
+		return time.Duration(s.Config.Server.ShutdownTimeout) * time.Second
+	}
+	return 30 * time.Second
 }

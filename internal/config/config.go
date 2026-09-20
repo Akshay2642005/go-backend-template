@@ -35,6 +35,8 @@ type ServerConfig struct {
 	CORSAllowedOrigins []string          `koanf:"cors_allowed_origins" validate:"required"`
 	RateLimit          RateLimitConfig   `koanf:"rate_limit"`
 	Idempotency        IdempotencyConfig `koanf:"idempotency"`
+	ShutdownTimeout    int               `koanf:"shutdown_timeout"`
+	DrainTimeout       int               `koanf:"drain_timeout"`
 }
 
 type RateLimitConfig struct {
@@ -63,6 +65,7 @@ type DatabaseConfig struct {
 	MaxIdleConns    int    `koanf:"max_idle_conns" validate:"required"`
 	ConnMaxLifetime int    `koanf:"conn_max_lifetime" validate:"required"`
 	ConnMaxIdleTime int    `koanf:"conn_max_idle_time" validate:"required"`
+	AutoMigrate     bool   `koanf:"auto_migrate"`
 }
 
 type RedisConfig struct {
