@@ -7,7 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"backend/internal/contextutil"
+	"backend/internal/lib/propagation"
 )
 
 // TaskMetadata holds request-scoped values that are propagated through
@@ -38,7 +38,7 @@ func isEnvelope(raw []byte) bool {
 // Returns the envelope bytes suitable for asynq.NewTask.
 func Envelope(ctx context.Context, payload []byte) ([]byte, error) {
 	meta := TaskMetadata{}
-	if v, ok := contextutil.PropagatedValuesFrom(ctx); ok {
+	if v, ok := propagation.PropagatedValuesFrom(ctx); ok {
 		meta.RequestID = v.RequestID
 		meta.UserID = v.UserID
 		meta.TraceID = v.TraceID
@@ -75,7 +75,7 @@ func ExtractMetadata(ctx context.Context, t *asynq.Task) (context.Context, []byt
 	// Only inject if at least one metadata value is present
 	if envelope.Meta.RequestID != "" || envelope.Meta.UserID != "" ||
 		envelope.Meta.TraceID != "" || envelope.Meta.SpanID != "" {
-		ctx = contextutil.WithPropagatedValues(ctx, &contextutil.PropagatedValues{
+		ctx = propagation.WithPropagatedValues(ctx, &propagation.PropagatedValues{
 			RequestID: envelope.Meta.RequestID,
 			UserID:    envelope.Meta.UserID,
 			TraceID:   envelope.Meta.TraceID,

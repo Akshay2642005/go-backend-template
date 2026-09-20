@@ -1,22 +1,22 @@
 package middleware
 
 import (
-	"backend/internal/contextutil"
+	"backend/internal/lib/propagation"
 )
 
 // Re-export contextutil types for backward compatibility.
 // New code should import contextutil directly.
 
-type PropagatedValues = contextutil.PropagatedValues
+type PropagatedValues = propagation.PropagatedValues
 
 var (
-	WithPropagatedValues   = contextutil.WithPropagatedValues
-	PropagatedValuesFrom   = contextutil.PropagatedValuesFrom
-	RequestIDFrom          = contextutil.RequestIDFrom
-	UserIDFrom             = contextutil.UserIDFrom
-	TraceIDFrom            = contextutil.TraceIDFrom
-	SpanIDFrom             = contextutil.SpanIDFrom
+	WithPropagatedValues   = propagation.WithPropagatedValues
+	PropagatedValuesFrom   = propagation.PropagatedValuesFrom
+	RequestIDFrom          = propagation.RequestIDFrom
+	UserIDFrom             = propagation.UserIDFrom
+	TraceIDFrom            = propagation.TraceIDFrom
+	SpanIDFrom             = propagation.SpanIDFrom
 )
 
 // Ensure the type alias works correctly at compile time.
-var _ PropagatedValues = contextutil.PropagatedValues{}
+var _ PropagatedValues = propagation.PropagatedValues{}

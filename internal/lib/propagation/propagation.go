@@ -1,6 +1,6 @@
-// Package contextutil provides shared context value types used across the
+// Package propagation provides shared context value types used across the
 // application to avoid import cycles between middleware and library packages.
-package contextutil
+package propagation
 
 import "context"
 

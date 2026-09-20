@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"backend/internal/contextutil"
+	"backend/internal/lib/propagation"
 )
 
 func TestEnvelope_WithMetadata(t *testing.T) {
 	ctx := context.Background()
-	ctx = contextutil.WithPropagatedValues(ctx, &contextutil.PropagatedValues{
+	ctx = propagation.WithPropagatedValues(ctx, &propagation.PropagatedValues{
 		RequestID: "req-123",
 		UserID:    "user-456",
 		TraceID:   "trace-789",
@@ -50,7 +50,7 @@ func TestEnvelope_NoMetadata(t *testing.T) {
 }
 
 func TestExtractMetadata_WithEnvelope(t *testing.T) {
-	original := &contextutil.PropagatedValues{
+	original := &propagation.PropagatedValues{
 		RequestID: "req-abc",
 		UserID:    "user-def",
 		TraceID:   "trace-ghi",
@@ -72,7 +72,7 @@ func TestExtractMetadata_WithEnvelope(t *testing.T) {
 	task := asynq.NewTask("email:welcome", envelope)
 	ctx, rawPayload := ExtractMetadata(context.Background(), task)
 
-	v, ok := contextutil.PropagatedValuesFrom(ctx)
+	v, ok := propagation.PropagatedValuesFrom(ctx)
 	require.True(t, ok)
 	assert.Equal(t, "req-abc", v.RequestID)
 	assert.Equal(t, "user-def", v.UserID)
@@ -87,7 +87,7 @@ func TestExtractMetadata_NoEnvelope(t *testing.T) {
 
 	ctx, payload := ExtractMetadata(context.Background(), task)
 
-	_, ok := contextutil.PropagatedValuesFrom(ctx)
+	_, ok := propagation.PropagatedValuesFrom(ctx)
 	assert.False(t, ok)
 	assert.Equal(t, rawPayload, payload)
 }
@@ -102,7 +102,7 @@ func TestExtractMetadata_EmptyMetadata(t *testing.T) {
 	task := asynq.NewTask("test", envelope)
 	ctx, rawPayload := ExtractMetadata(context.Background(), task)
 
-	_, ok := contextutil.PropagatedValuesFrom(ctx)
+	_, ok := propagation.PropagatedValuesFrom(ctx)
 	assert.False(t, ok, "should not inject values when all metadata is empty")
 	assert.Equal(t, []byte(`{}`), rawPayload)
 }
@@ -110,7 +110,7 @@ func TestExtractMetadata_EmptyMetadata(t *testing.T) {
 func TestRoundTrip(t *testing.T) {
 	// Simulate: HTTP handler creates task with metadata
 	ctx := context.Background()
-	ctx = contextutil.WithPropagatedValues(ctx, &contextutil.PropagatedValues{
+	ctx = propagation.WithPropagatedValues(ctx, &propagation.PropagatedValues{
 		RequestID: "req-roundtrip",
 		UserID:    "user-roundtrip",
 	})
@@ -131,7 +131,7 @@ func TestRoundTrip(t *testing.T) {
 	jobCtx, rawPayload := ExtractMetadata(context.Background(), task)
 
 	// Verify metadata propagated
-	v, ok := contextutil.PropagatedValuesFrom(jobCtx)
+	v, ok := propagation.PropagatedValuesFrom(jobCtx)
 	require.True(t, ok)
 	assert.Equal(t, "req-roundtrip", v.RequestID)
 	assert.Equal(t, "user-roundtrip", v.UserID)
