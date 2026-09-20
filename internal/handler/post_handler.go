@@ -5,7 +5,6 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"backend/internal/errs"
-	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/server"
 	"backend/internal/service"
@@ -76,18 +75,13 @@ func (h *PostHandler) GetByID(c echo.Context) error {
 	return c.JSON(200, model.PostFromModel(post))
 }
 
-// Create creates a new post. The author_id is extracted from the Clerk user context.
+// Create creates a new post.
 func (h *PostHandler) Create(c echo.Context) error {
 	return Handle(h.Handler, h.create, 201, &model.CreatePostRequest{})(c)
 }
 
 func (h *PostHandler) create(c echo.Context, req *model.CreatePostRequest) (interface{}, error) {
-	authorID := middleware.GetUserID(c)
-	if authorID == "" {
-		authorID = "anonymous"
-	}
-
-	post, err := h.postService.Create(c.Request().Context(), *req, authorID)
+	post, err := h.postService.Create(c.Request().Context(), *req)
 	if err != nil {
 		return nil, err
 	}

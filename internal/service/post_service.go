@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"backend/internal/errs"
+	"backend/internal/lib/propagation"
 	"backend/internal/model"
 	"backend/internal/repository"
 )
@@ -23,8 +24,14 @@ func NewPostService(repo *repository.PostRepository) *PostService {
 	}
 }
 
-// Create creates a new post. The authorID comes from the Clerk user context.
-func (s *PostService) Create(ctx context.Context, req model.CreatePostRequest, authorID string) (*model.Post, error) {
+// Create creates a new post. The authorID is resolved from propagated
+// context values (injected by ContextEnhancer), falling back to "anonymous".
+func (s *PostService) Create(ctx context.Context, req model.CreatePostRequest) (*model.Post, error) {
+	authorID := propagation.UserIDFrom(ctx)
+	if authorID == "" {
+		authorID = "anonymous"
+	}
+
 	now := time.Now().UTC()
 	status := model.PostStatusDraft
 	if req.Status != "" {
