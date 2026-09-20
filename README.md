@@ -1,114 +1,155 @@
 # Go Backend Template
 
-A production-ready Go backend template using Echo, Postgres, Redis, and Clerk.
-Clean layered architecture with constructor dependency injection, typed context
-propagation, RFC 7807 errors, and a working Posts CRUD example to copy from.
+This is a starting point for building production Go APIs without reinventing
+the same plumbing every time. It gives you a layered codebase with real
+authentication, a database, caching, background jobs, and observability —
+plus a fully working Posts feature you can read, run, and copy when you
+build your own resources.
 
-## Stack
+Everything is wired up and tested. Clone it, configure a few environment
+variables, and you have an API you can deploy.
 
-| Concern      | Choice                                              |
-|--------------|-----------------------------------------------------|
-| HTTP         | Echo v4                                             |
-| Database     | Postgres 16 via pgx/v5, migrations via tern         |
-| Cache/queue  | Redis 8 via go-redis (single, cluster, or sentinel) |
-| Auth         | Clerk (JWT via `clerkhttp`)                         |
-| Jobs         | asynq (Redis-backed task queue)                     |
-| Email        | Resend                                              |
-| Config       | koanf, `BOILERPLATE_` env prefix                    |
-| Logging      | zerolog (structured)                                |
-| Tracing      | OpenTelemetry OTLP/gRPC (disabled by default)       |
-| Validation   | validator/v10 + custom `Validate()`                 |
-| Errors       | RFC 7807 Problem Details                            |
-| Tests        | testcontainers (real Postgres/Redis in Docker)      |
+## What's Inside
 
-## Quick Start
+The HTTP layer runs on **Echo**, which is fast and unobtrusive — it stays
+out of your way once routes are registered. Data lives in **Postgres**,
+accessed through `pgx` (the best Postgres driver in the Go ecosystem), with
+schema changes managed by **tern** migrations. **Redis** does double duty:
+it's the cache and the backbone of the background job queue (**asynq**).
 
-Prerequisites: Go 1.26+, Docker, [Task](https://taskfile.dev).
+Authentication is handled by **Clerk**, so you never store passwords or
+manage sessions yourself — you validate a JWT and trust the user ID inside
+it. Outgoing mail goes through **Resend**.
+
+For configuration, the app reads environment variables through **koanf**,
+which maps them onto typed structs and validates them at startup. If you
+misconfigure something, the app refuses to boot and tells you exactly which
+variable is wrong — much better than a nil pointer three requests in.
+
+Logging is structured JSON via **zerolog**, and distributed tracing works
+through **OpenTelemetry** if you point it at a collector. Both are designed
+to degrade gracefully: if tracing is off or Redis is down, requests still
+succeed. Nothing in the observability or caching path can take down your
+API.
+
+Errors follow **RFC 7807 Problem Details**, so every failure — validation,
+not-found, database constraint — comes back in the same predictable shape
+with a request ID you can grep for in the logs.
+
+Tests spin up real Postgres and Redis containers with **testcontainers**,
+so you're testing against the actual infrastructure instead of mocks that
+drift from reality.
+
+## Getting Started
+
+You'll need Go 1.26 or newer, Docker, and
+[Task](https://taskfile.dev) (a simpler alternative to Make).
+
+First, grab the dependencies and set up your environment:
 
 ```bash
-# 1. Install deps
 go mod download
-
-# 2. Configure
 cp .env.example .env
-# Edit .env — at minimum set BOILERPLATE_AUTH.SECRET_KEY to a real Clerk key
-
-# 3. Start Postgres + Redis
-task compose:up        # or: docker compose up -d
-
-# 4. Migrate
-task migrations:up
-
-# 5. Run
-task run
 ```
 
-Server starts on `:8080` (configurable). Docs at `http://localhost:8080/docs`.
+Open `.env` and look through it. For local development most defaults just
+work, but there's one thing you must change: `BOILERPLATE_AUTH.SECRET_KEY`
+needs a real Clerk secret key. Without it, every authenticated endpoint
+will reject you. Grab one from the
+[Clerk dashboard](https://dashboard.clerk.com) — a test-mode key is fine
+for local work.
+
+Next, start Postgres and Redis, run the migrations, and boot the server:
 
 ```bash
-task test              # run all tests (needs Docker running)
-task tidy              # go fmt + go mod tidy + verify
-task migrations:new name=add_things   # scaffold a migration
+task compose:up      # starts Postgres 16 + Redis 8 in Docker
+task migrations:up   # creates the tables
+task run             # starts the API on :8080
 ```
 
-## Project Layout
+Visit `http://localhost:8080/docs` and you'll see the interactive API
+explorer. `/healthz` should return 200 — that means you're up.
 
-```
-cmd/go-boilerplate/     # main.go — wiring only, no logic
-internal/
-  config/               # koanf structs, BOILERPLATE_ prefix, validation
-  server/               # Server struct: Config, Logger, DB, Cache, Job
-  database/             # pgx pool, tern migrator, tx helpers
-  database/migrations/  # 001_setup.sql, 002_posts.sql, ...
-  repository/           # data access, one file per resource
-  service/              # business logic, one file per resource
-  handler/              # HTTP adapters, one file per resource
-  model/                # domain types + request/response DTOs
-  router/               # route registration (router.go + *_routes.go)
-  middleware/           # cross-cutting HTTP concerns
-  cache/                # Redis operations, cache-aside, singleflight
-  lib/                  # shared libs: breaker, email, job, propagation, utils
-  errs/                 # RFC 7807 problem types + helpers
-  validation/           # BindAndValidate, Validatable interface
-  otel/                 # OpenTelemetry init (no-op when disabled)
-  logger/               # zerolog setup
-  testing/              # testcontainers helpers for tests
-static/                 # openapi.json (source of truth), Scalar UI
-templates/emails/       # HTML email templates
+A few other commands you'll use daily:
+
+```bash
+task test                          # run the full test suite (needs Docker)
+task migrations:new name=add_x     # scaffold a new migration
+task tidy                          # format code, tidy modules, verify deps
+task compose:down                  # stop infra, keep data
+task compose:down-v                # stop infra and wipe data (fresh start)
 ```
 
-## Architecture
+## How the Code Is Organized
 
-### Request Flow
+Everything the app does lives under `internal/`, which means Go won't let
+outside modules import it — this is your private codebase. Here's the tour:
+
+- `cmd/go-boilerplate/main.go` — the entry point. It loads config, builds
+  the server, wires dependencies, starts HTTP, and handles shutdown. There
+  is no business logic here, only wiring.
+- `handler/` — thin HTTP adapters. A handler takes a request, calls a
+  service, and returns a response. It knows about HTTP status codes and
+  nothing else.
+- `service/` — where your business rules live. "Can this user publish this
+  post?" is answered here. Services never import Echo or touch HTTP.
+- `repository/` — SQL and nothing but SQL. Each repository wraps queries
+  for one resource and maps rows onto models.
+- `model/` — domain structs plus the request/response shapes your API
+  speaks. Validation rules live alongside the types they protect.
+- `router/` — route registration. `router.go` builds the Echo instance and
+  the middleware chain; `*_routes.go` files bind URLs to handlers.
+- `middleware/` — everything that runs around your handlers: auth, rate
+  limiting, request IDs, logging, tracing, caching headers.
+- `cache/` — typed Redis helpers with stampede protection and metrics.
+- `lib/` — shared libraries that don't belong to a layer: the circuit
+  breaker, the email client, the job queue, and context propagation.
+- `errs/` — error types and constructors. Every error your API returns is
+  built here.
+- `config/`, `database/`, `server/`, `logger/`, `otel/`, `validation/` —
+  infrastructure. You'll configure these more than you'll change them.
+- `testing/` — helpers for tests: throwaway databases, transaction
+  wrappers, assertions.
+- `static/openapi.json` — the API contract. The `/docs` page renders it.
+- `templates/emails/` — HTML email templates.
+
+## How a Request Travels Through the System
+
+Say a client sends `POST /api/v1/posts` with a Clerk JWT. Here's what
+happens, in order:
+
+1. **Echo routes the request** to the posts group, which requires
+   authentication. The Clerk middleware validates the token and records
+   the user ID.
+2. **The middleware chain runs.** Rate limiting checks the Redis sliding
+   window. A request ID is assigned. The `ContextEnhancer` bundles the
+   request ID and user ID into a `PropagatedValues` struct and tucks it
+   into the request's `context.Context`, alongside a logger already
+   tagged with who is asking and what they're asking for.
+3. **The handler takes over.** The `Handle` helper binds the JSON body
+   onto a `CreatePostRequest`, validates it, and — only if everything
+   checks out — calls your closure with `(ctx, req)`. If validation
+   fails, the client gets a 400 with per-field details and your closure
+   never runs.
+4. **The service applies business logic.** It pulls the user ID out of
+   the context (`propagation.UserIDFrom(ctx)`), builds the post, and
+   hands it to the repository. It has no idea Echo exists.
+5. **The repository runs SQL** and returns the row. The handler converts
+   it to a response shape and `Handle` serializes it with status 201.
 
 ```
-Client
-  │
-  ▼
-Echo router (/api/v1/...)
-  │
-  ▼  middleware pipeline (see below)
-ContextEnhancer ── injects PropagatedValues (requestID, userID)
-  │                  into context.Context
-  ▼
-Handler (thin adapter)
-  │  Handle() → bind + validate + log, then closure(ctx, req)
-  ▼
-Service (business logic)
-  │  reads userID via propagation.UserIDFrom(ctx)
-  ▼
-Repository (SQL via pgx)
-  │
-  ▼
-Postgres
+Client ──► Echo ──► middleware ──► ContextEnhancer ──► Handler ──► Service ──► Repository ──► Postgres
+                              (user ID into ctx)       (ctx out)    (ctx in)      (ctx in)
 ```
 
-`echo.Context` never leaves the HTTP layer. Everything below the handler
-takes `context.Context`, which carries request-scoped values.
+The key idea: `echo.Context` never travels past the handler. Everything
+below it speaks plain `context.Context`, which is why services stay
+testable and reusable from background jobs.
 
-### Dependency Injection
+## How Dependencies Are Wired
 
-Constructor DI through `*server.Server`. Wired once in `main.go`:
+There is no DI framework — just constructors, called once in `main.go`
+from the top down:
 
 ```go
 repos    := repository.NewRepositories(srv)      // repos.Post (from s.DB.Pool)
@@ -117,45 +158,49 @@ handlers := handler.NewHandlers(srv, services)   // handlers.Post (from services
 r        := router.NewRouter(srv, handlers)
 ```
 
-Rules:
+Each layer receives what it needs from the layer above it. Repositories
+get the database pool. Services get repositories. Handlers get services.
+Nobody reaches sideways or constructs their own dependencies — if you
+catch yourself calling `NewPostService(pool)` inside a handler, something
+has gone wrong.
 
-- Each layer receives dependencies from the layer above. Never construct
-  them ad-hoc (no `NewPostService(pool)` inside a handler).
-- Repositories take `*pgxpool.Pool` (or the `Querier` interface for tx support).
-- Services take `*repository.XxxRepository`.
-- Handlers take `*service.XxxService` plus `*server.Server` (for `Handler` base).
-- To add a resource: add a field to `Repositories`, `Services`, `Handlers`,
-  and wire it in each `New*` constructor. See "Adding a Resource" below.
+When you add a new resource, you follow the same rhythm: add a field to
+`Repositories`, `Services`, and `Handlers`, and wire each constructor to
+the previous layer. The compiler will guide you — miss a step and
+something won't build.
 
-### Context Propagation
+## Where the User ID Comes From
 
-`ContextEnhancer` middleware runs on every request and injects:
+This deserves its own section because it surprises people. Handlers never
+extract the user ID. Services never import Clerk or Echo. Instead:
 
-```go
-type PropagatedValues struct {
-    RequestID string
-    UserID    string   // from Clerk JWT (via auth middleware)
-    TraceID   string
-    SpanID    string
-}
-```
+1. The Clerk middleware validates the JWT and stores the user ID on the
+   Echo context (`c.Set("user_id", ...)`).
+2. The `ContextEnhancer` — which runs on every request — copies that ID
+   into `PropagatedValues` inside the standard `context.Context`.
+3. Services read it with `propagation.UserIDFrom(ctx)`. If nobody is
+   logged in (or the value wasn't set), they get an empty string and
+   decide what that means — for posts, it means `"anonymous"`.
 
-Services read these without touching Echo:
+Because the user ID travels in `context.Context` rather than Echo state,
+it survives the trip into background jobs too. When you enqueue work with
+`job.Envelope(ctx, payload)`, the request ID, user ID, and trace IDs are
+serialized into the task. When the worker picks it up,
+`job.ExtractMetadata` puts them back. A job that creates a post records
+the same author as the HTTP request that triggered it, with no extra code.
 
-```go
-authorID := propagation.UserIDFrom(ctx)  // "" if absent
-```
+This is safe under load. Every request builds a fresh context and a fresh
+`PropagatedValues` struct — `context.WithValue` never mutates, it wraps.
+Ten thousand concurrent requests means ten thousand isolated chains with
+nothing shared between them. The service, repository, and connection pool
+are all stateless with respect to the request; they only ever read what
+was handed to them.
 
-The same values flow into background jobs: `lib/job` serializes them into
-the task payload envelope on enqueue and re-injects them on dequeue. A job
-calling `PostService.Create` sees the original request's user ID with no
-extra code. This is concurrency-safe — every request gets a fresh context
-and a fresh `PropagatedValues` struct; nothing is shared or mutated.
+## Writing Handlers
 
-### Handler Pattern
-
-One function per operation. Closures receive `(ctx context.Context, req *Req)`
-— no `echo.Context`, no shadowing:
+A handler is one function per operation. You describe what a valid request
+looks like, what to do with it, and what status to return — `Handle` takes
+care of binding, validation, logging, and serialization:
 
 ```go
 func (h *PostHandler) Create(c echo.Context) error {
@@ -169,211 +214,230 @@ func (h *PostHandler) Create(c echo.Context) error {
 }
 ```
 
-`Handle` runs the pipeline: bind → validate → execute → structured log →
-JSON response with the given status. Variants:
+Notice the closure receives `ctx`, not Echo's context. If you need
+Echo-specific things — a path parameter, a raw JSON response, an empty
+204 — you skip the wrapper and use Echo directly, the way `GetByID` and
+`Delete` do. Both styles live side by side; pick whichever fits the
+endpoint.
 
-- `Handle` — returns a JSON body (200/201/...)
-- `HandleNoContent` — 204, no body
-- `HandleFile` — file download (`[]byte` + filename + content type)
+There are three wrappers for three kinds of responses: `Handle` returns a
+JSON body, `HandleNoContent` returns an empty 204, and `HandleFile`
+streams a download. Validation failures, panics in logging, and unexpected
+errors are all handled before your code ever sees them — or after it
+returns them, in the case of errors.
 
-Endpoints needing path params or raw Echo features (`c.Param`, `c.JSON`,
-`c.NoContent`) skip the wrapper — see `GetByID`/`Delete` in
-`post_handler.go`.
+## What Runs Around Your Handlers
 
-### Middleware Pipeline
+Middleware executes in a fixed order, defined in `router.go`. Each piece
+does one job:
 
-Global (in `router.go`, in order):
+- **Rate limiting** checks a Redis-backed sliding window before anything
+  expensive happens. If Redis is unreachable, requests pass through
+  rather than failing — limiting must never become an outage.
+- **Security headers, CORS, and request timeouts** set the baseline: XSS
+  and clickjacking protection, allowed origins, and a deadline after
+  which slow requests get a 504.
+- **Request ID, tracing, and context enhancement** give every request an
+  identity. The request ID shows up in logs, error responses, and traces,
+  so you can follow one request across all three.
+- **Metrics and request logging** record what happened: how long it took,
+  what status went back, which route served it.
+- **Compression and body logging** are opt-in. Gzip is on by default;
+  request/response body logging exists for debugging and stays off in
+  production (it truncates at 1 KB when enabled).
 
-1. RateLimit — Redis sliding window, fail-open
-2. CORS, Secure (security headers), RequestTimeout
-3. RequestID, Tracing (OTel spans), ContextEnhancer (logger + propagation)
-4. Metrics, RequestLogger, Recover
-5. Compression (optional), BodyLogger (optional, debug)
+On top of the globals, the `/api/v1` group adds HTTP caching semantics
+(ETags, `304 Not Modified`) and idempotency: if a client retries a POST
+with the same `Idempotency-Key`, it gets the original response replayed
+instead of a duplicate side effect. And any route group can require
+authentication with a single line — that's how `/posts` is protected.
 
-Per-group (`/api/v1`): CacheControl (ETag / 304), Idempotency
-(`Idempotency-Key` replay for POST/PUT/PATCH).
+## When Things Go Wrong
 
-Per-route: `RequireAuth` (Clerk) on protected groups like `/posts`.
-
-### Errors (RFC 7807)
-
-All errors are Problem Details with `application/problem+json`:
+Every error your API returns looks the same:
 
 ```json
 {
   "type": "https://api.example.com/problems/validation",
   "title": "Validation failed",
   "status": 400,
-  "detail": "...",
-  "instance": "/api/v1/posts (req: abc-123)",
+  "detail": "title is required",
+  "instance": "/api/v1/posts (req: 01J...)",
   "errors": [{ "field": "title", "error": "is required" }]
 }
 ```
 
-Helpers in `internal/errs`: `ProblemNotFound`, `ProblemValidation`,
-`NewBadRequestError`, etc. pgx errors are mapped to human-readable
-problems via `internal/sqlerr`.
+This is RFC 7807, and clients can rely on it: `status` matches the HTTP
+code, `instance` always contains the request ID, and validation failures
+list each bad field. The constructors live in `internal/errs` —
+`ProblemNotFound`, `ProblemValidation`, `NewBadRequestError` — and
+database errors are translated into plain language by `internal/sqlerr`,
+so clients never see raw Postgres messages.
 
-### Configuration
+## Configuration
 
-koanf with `BOILERPLATE_` prefix, `.` delimiter, validated on load.
-Every key in `.env.example` maps to a struct field:
+All settings come from the environment. Variable names start with
+`BOILERPLATE_` and use dots to mirror the config structs, so
+`BOILERPLATE_SERVER.PORT` fills `Config.Server.Port`. On startup the app
+validates everything and refuses to boot with a clear message if
+something is missing or malformed. `.env.example` documents every
+variable; copy it to `.env` and adjust.
 
-| Prefix | Struct | Notes |
-|---|---|---|
-| `BOILERPLATE_PRIMARY.ENV` | `Primary` | `local` skips forced migrate |
-| `BOILERPLATE_SERVER.*` | `ServerConfig` | ports, timeouts, rate limit, idempotency, shutdown |
-| `BOILERPLATE_DATABASE.*` | `DatabaseConfig` | pgx pool, retry, `AUTO_MIGRATE` |
-| `BOILERPLATE_DB_DSN` | — | CLI only (tern via task); app builds its own DSN |
-| `BOILERPLATE_AUTH.SECRET_KEY` | `AuthConfig` | Clerk key — must be real, not `"secret"` |
-| `BOILERPLATE_REDIS.*` | `RedisConfig` | mode: single/cluster/sentinel, pool, TLS, TTL |
-| `BOILERPLATE_INTEGRATION.*` | `IntegrationConfig` | Resend API key |
-| `BOILERPLATE_OBSERVABILITY.*` | `ObservabilityConfig` | logging, tracing, metrics, health checks |
+A few things worth knowing about specific areas:
 
-Redis and observability configs merge over defaults — unset fields get
-sane values, so local dev works with a minimal `.env`.
+**Server.** Ports, timeouts, CORS origins, and the graceful-shutdown
+budgets live here. Rate limiting and idempotency each have their own
+subsection and are off by default in local development — flip
+`RATE_LIMIT.ENABLED` when you're ready to exercise them.
 
-### Database & Migrations
+**Database.** Connection details plus pool sizing. `AUTO_MIGRATE` runs
+migrations on boot, which is handy in containers but something you'll
+want to think about deliberately in production. The app builds its own
+connection string from these fields; `BOILERPLATE_DB_DSN` exists only for
+the `tern` CLI used by `task migrations:up`.
 
-- Migrations live in `internal/database/migrations/`, applied by tern.
-- `task migrations:new name=foo` scaffolds `NNN_foo.sql` (up + down).
-- `task migrations:up` applies via `BOILERPLATE_DB_DSN`.
-- `AUTO_MIGRATE=true` runs migrations on startup (useful in containers).
-- `database.WithTx(ctx, pool, fn)` runs a function in a transaction with
-  auto commit/rollback. Repositories accept the `Querier` interface so the
-  same code works inside or outside a tx.
-- Connection retry with backoff on startup (`CONNECT_RETRIES`).
+**Auth.** Just the Clerk secret key. This is the one value that has no
+usable default — the placeholder `"secret"` in the example file will boot
+but reject every authenticated request. Use a test key locally and a live
+key in production.
 
-### Redis & Caching
+**Redis.** Address, topology mode (`single`, `cluster`, or `sentinel`),
+pool sizes, timeouts, and retry behavior, plus TLS flags you'll need for
+managed offerings like Upstash or ElastiCache. Anything you leave unset
+falls back to sensible defaults, so local development needs almost
+nothing here.
 
-`internal/cache` provides typed helpers (`Get`, `Set`, `GetOrSet`,
-`Delete`, `Increment`) over `redis.UniversalClient`:
+**Integrations.** Third-party keys — currently just Resend for email.
 
-- Topologies: single, cluster, sentinel (`REDIS.MODE`).
-- Cache-aside `GetOrSet` with singleflight stampede protection.
-- TTL jitter prevents synchronized expiry stampedes.
-- Fail-open: Redis errors log and fall through to origin — requests never block.
-- Key prefix namespacing per environment; long segments SHA-256 hashed.
-- Hit/miss/error counters + slow-op logging.
-- Circuit breaker (`lib/breaker`) trips on repeated Redis failures.
+**Observability.** Log level and format, OTel tracing and metrics
+endpoints (both disabled by default), and which checks the readiness
+probe runs. The service name and environment are filled in automatically.
 
-### Background Jobs
+## Data, Caching, and Jobs
 
-asynq over Redis. `lib/job` owns the client, server, mux, and handlers:
+**Database access** goes through repositories that take either the pool
+or a transaction — both satisfy the same `Querier` interface, so the same
+repository code works inside and outside a transaction. When you need
+atomicity across multiple writes, `database.WithTx` runs your function
+inside a transaction and commits only if it returns nil. Migrations are
+plain SQL files applied in order; `task migrations:new` scaffolds the
+up/down pair for you.
 
-- Queues: critical, default, low.
-- Cron schedules registered in `job.go`.
-- Context propagation via payload envelope: enqueue with `job.Envelope(ctx,
-  payload)`, extract on the worker with `job.ExtractMetadata(ctx, task)`.
-  Request ID, user ID, and trace IDs survive the round trip.
-- Welcome-email task + Resend integration included as an example.
+**Redis** is wrapped in typed helpers (`Get`, `Set`, `GetOrSet`,
+`Increment`, ...) that handle serialization, key namespacing, and
+metrics. `GetOrSet` implements the cache-aside pattern with singleflight
+deduplication, so a hundred simultaneous misses for the same key produce
+one origin call instead of a hundred. Expirations get random jitter so
+keys don't stampede at the same second. And if Redis goes away, a circuit
+breaker trips and everything falls through to the origin — slower, but
+working.
 
-### Auth
-
-Clerk JWTs. `AuthMiddleware.RequireAuth` validates the token and sets
-`user_id` / `user_role` on the echo context. `ContextEnhancer` (which runs
-on all routes) then copies the user ID into `PropagatedValues`, so services
-read it from `context.Context` without importing Echo or Clerk.
-
-Posts use `author_id` from the Clerk user — no foreign key to a users
-table (Clerk owns identity).
-
-### Observability
-
-- Logs: zerolog, JSON in prod / console locally. Request logger +
-  per-request child loggers with request ID, method, path, user.
-- Tracing: OTel OTLP/gRPC export, `otelecho` spans. Disabled by default
-  (`TRACING.ENABLED=false` = no-op).
-- Metrics: request duration histogram + count, cache hit/miss counters.
-- Health: `/healthz` (liveness), `/readyz` (readiness: DB + Redis checks),
-  `/status` (legacy full details).
-- Body logging: opt-in request/response logging, 1 KB truncation.
-
-### Graceful Shutdown
-
-Ordered teardown on SIGINT/SIGTERM: HTTP drain → DB pool → Redis →
-job server. `DRAIN_TIMEOUT` (default 15s) bounds in-flight requests;
-`SHUTDOWN_TIMEOUT` (default 30s) bounds the whole sequence. OTel flushes
-first so no traces are lost.
-
-## Adding a Resource
-
-Copy the Posts stack. Six files, then two wiring edits:
-
-1. **Model** (`internal/model/widget.go`) — domain struct + request/response
-   DTOs. Requests implement `Validate() error` (the `Validatable`
-   interface) for custom rules beyond struct tags.
-2. **Migration** (`internal/database/migrations/003_widgets.sql`) —
-   `task migrations:new name=widgets`, write up/down SQL.
-3. **Repository** (`internal/repository/widget_repository.go`) — SQL via
-   `s.DB.Pool` (or `Querier`). Add `Widget *WidgetRepository` to
-   `Repositories` and wire in `NewRepositories`.
-4. **Service** (`internal/service/widget_service.go`) — business logic,
-   takes `*repository.WidgetRepository`. Add `Widget *WidgetService` to
-   `Services`, wire in `NewServices`.
-5. **Handler** (`internal/handler/widget_handler.go`) — one function per
-   operation with `Handle`. Add `Widget *WidgetHandler` to `Handlers`,
-   wire in `NewHandlers`.
-6. **Routes** (`internal/router/widget_routes.go`) — group + auth +
-   method bindings. Register from `router.go`.
-7. **OpenAPI** (`static/openapi.json`) — add paths + schemas (served at
-   `/docs` via Scalar).
+**Background jobs** run on asynq with critical, default, and low queues
+plus cron scheduling. The welcome-email flow shows the whole lifecycle:
+enqueue with context via `job.Envelope`, process on a worker with
+`job.ExtractMetadata`, send through Resend. Add your own task types the
+same way.
 
 ## Testing
 
-Tests use testcontainers — real Postgres/Redis containers, no mocks for
-infrastructure:
+Run `task test` and every package's tests execute against real
+infrastructure — Postgres and Redis containers that the test helpers
+create, migrate, and tear down automatically. Docker needs to be running;
+there's no other setup.
 
-```bash
-task test            # go test ./... (Docker must be running)
-go test ./internal/cache/... -run TestGetOrSet -v
-```
+The helpers in `internal/testing` do the heavy lifting. `SetupTestDB`
+gives you a fresh database with migrations applied. Transaction wrappers
+let each test case run inside a transaction that rolls back afterward, so
+tests never leak data into each other. Middleware and handler tests use
+`httptest` with a real Echo instance rather than mocks.
 
-Helpers in `internal/testing`: `SetupTestDB` (fresh Postgres per package +
-migrations applied), transaction helpers (`WithTransaction`,
-`WithRollbackTransaction` for test isolation), assertion helpers.
+When you write tests, follow the existing shape: a `*_test.go` file next
+to the code, table-driven cases with `testify/require`, a real database
+for anything touching storage, and no dependence on `.env` or shared
+state. If your test needs the database, take it from `SetupTestDB`; if it
+doesn't, don't start one.
 
-Conventions:
+## The API
 
-- `*_test.go` next to the code it tests.
-- Table-driven tests with `testify/require`.
-- Repository/service tests get a real DB from `SetupTestDB`; wrap each
-  case in a rollback transaction so tests don't leak state.
-- Middleware/handler tests use `httptest` + Echo directly (see
-  `body_logger_test.go`, `timeout_test.go`).
-- Keep tests hermetic: no reliance on `.env`, no shared containers
-  across packages.
+The contract lives in `static/openapi.json` and renders interactively at
+`/docs`. Protected routes expect `Authorization: Bearer <clerk-jwt>`.
 
-## API Reference
-
-Full spec in `static/openapi.json`, interactive explorer at `/docs`.
-
-| Method | Path | Auth | Description |
+| Method | Path | Auth | What it does |
 |---|---|---|---|
-| GET | `/healthz` | — | Liveness |
-| GET | `/readyz` | — | Readiness (DB + Redis) |
+| GET | `/healthz` | — | Liveness: is the process alive? |
+| GET | `/readyz` | — | Readiness: can it serve? checks DB + Redis |
 | GET | `/status` | — | Legacy health details |
-| GET | `/docs` | — | Scalar API explorer |
-| GET | `/api/v1/posts` | Clerk | List (page, limit, status) |
-| POST | `/api/v1/posts` | Clerk | Create (`Idempotency-Key` supported) |
-| GET | `/api/v1/posts/:id` | Clerk | Get one |
-| PUT | `/api/v1/posts/:id` | Clerk | Update |
-| DELETE | `/api/v1/posts/:id` | Clerk | Delete (204) |
+| GET | `/docs` | — | Interactive API explorer |
+| GET | `/api/v1/posts` | Clerk | List posts (`page`, `limit`, `status` filter) |
+| POST | `/api/v1/posts` | Clerk | Create a post (send `Idempotency-Key` to dedupe retries) |
+| GET | `/api/v1/posts/:id` | Clerk | Fetch one post |
+| PUT | `/api/v1/posts/:id` | Clerk | Update a post |
+| DELETE | `/api/v1/posts/:id` | Clerk | Delete a post (empty 204) |
 
-Protected routes take `Authorization: Bearer <clerk-jwt>`.
+## Adding Your Own Resource
 
-## Deployment Checklist
+The fastest way to learn the template is to add something. Say you want
+a `comments` resource. You'll touch six files, each in the layer it
+belongs to, then wire three constructors:
 
-- [ ] Real `BOILERPLATE_AUTH.SECRET_KEY` (Clerk live key)
-- [ ] Real `BOILERPLATE_INTEGRATION.RESEND_API_KEY`
-- [ ] `BOILERPLATE_PRIMARY.ENV` set (non-`local` forces migrate on boot)
-- [ ] TLS in front (HSTS via `SECURITY_HSTS` if terminating here)
-- [ ] Redis reachable; `REDIS.MODE` matches topology; TLS flags for managed Redis
-- [ ] Rate limiting + idempotency enabled
-- [ ] OTel endpoints + sample rate configured
-- [ ] `AUTO_MIGRATE` decision made (on for containers, off if migrating via CI)
-- [ ] Log aggregation + alerts on `/readyz`
-- [ ] Backups for Postgres; persistence for Redis (AOF/RDB)
+Start with the **model** — the struct, what create/update requests look
+like, and what responses go back. Put validation next to the types: struct
+tags for the simple rules (`required`, `min`), a `Validate()` method for
+anything cross-field.
+
+Then the **migration**. Run `task migrations:new name=comments`, write
+the `CREATE TABLE` in the up section and the `DROP TABLE` in the down
+section, and apply it with `task migrations:up`. Look at `002_posts.sql`
+if you want an example of the file format.
+
+The **repository** is pure SQL — a `Create`, a `GetByID`, a `List`, an
+`Update`, a `Delete`, each taking `context.Context` first. Register it by
+adding a `Comment` field to the `Repositories` struct and constructing it
+in `NewRepositories` from the pool.
+
+The **service** holds anything the database shouldn't decide: defaults,
+state transitions, permission checks. It takes your repository in its
+constructor. Same dance — field on `Services`, line in `NewServices`.
+
+The **handler** is the thinnest piece: one function per endpoint calling
+`Handle` with a closure that calls the service. Field on `Handlers`, line
+in `NewHandlers`, and you're nearly there.
+
+Finally, **routes**: a small `comment_routes.go` that creates the group,
+attaches `RequireAuth`, and binds methods to handler functions. Register
+it from `router.go`, add the paths to `static/openapi.json`, and your
+resource is live with auth, validation, logging, tracing, rate limiting,
+and error handling — all inherited, none reimplemented.
+
+## Going to Production
+
+When you're ready to deploy, work through these:
+
+- Swap in the real Clerk and Resend keys — the example values boot but
+  don't do anything useful.
+- Set `BOILERPLATE_PRIMARY.ENV` to your environment name. Anything other
+  than `local` makes the app migrate on boot, which is what you want if
+  nothing else runs migrations.
+- Decide who runs migrations: the app (`AUTO_MIGRATE=true`, simplest in
+  containers) or your pipeline (`task migrations:up` in CI, more
+  control). Pick one, not both.
+- Point Redis config at your real topology — mode, address, credentials,
+  and TLS for managed providers.
+- Turn on rate limiting and idempotency. They default off because they're
+  noise locally; in production they're protection.
+- Configure the OTel endpoints and sample rate, and point your log
+  shipper at stdout. Alert on `/readyz`, not just the process.
+- Terminate TLS in front of the app (or set `SECURITY_HSTS` if the app
+  terminates it). Keep secrets in your platform's secret store, never in
+  the image.
+- Make sure Postgres is backed up and Redis persists (AOF or RDB). The
+  compose file is for development — production infrastructure is yours
+  to provision.
+
+On shutdown the app drains in-flight HTTP requests first, then closes the
+database pool, Redis, and the job server in that order. `DRAIN_TIMEOUT`
+bounds the drain, `SHUTDOWN_TIMEOUT` bounds everything. Send SIGTERM and
+it does the right thing.
 
 ## License
 
