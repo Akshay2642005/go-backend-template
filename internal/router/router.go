@@ -6,10 +6,9 @@ import (
 	"backend/internal/handler"
 	"backend/internal/middleware"
 	"backend/internal/server"
-	"backend/internal/service"
 )
 
-func NewRouter(s *server.Server, h *handler.Handlers, services *service.Services) *echo.Echo {
+func NewRouter(s *server.Server, h *handler.Handlers) *echo.Echo {
 	middlewares := middleware.NewMiddlewares(s)
 
 	router := echo.New()

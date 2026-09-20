@@ -114,7 +114,7 @@ Constructor DI through `*server.Server`. Wired once in `main.go`:
 repos    := repository.NewRepositories(srv)      // repos.Post (from s.DB.Pool)
 services := service.NewServices(srv, repos)      // services.Post (from repos.Post)
 handlers := handler.NewHandlers(srv, services)   // handlers.Post (from services.Post)
-r        := router.NewRouter(srv, handlers, services)
+r        := router.NewRouter(srv, handlers)
 ```
 
 Rules:
