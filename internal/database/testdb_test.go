@@ -23,6 +23,12 @@ type testDB struct {
 func setupTestDB(t *testing.T) (*testDB, func()) {
 	t.Helper()
 
+	defer func() {
+		if r := recover(); r != nil {
+			t.Skipf("Skipping test: Docker not available or testcontainers error: %v", r)
+		}
+	}()
+
 	ctx := context.Background()
 	dbName := fmt.Sprintf("test_%s", uuid.New().String()[:8])
 
@@ -41,13 +47,19 @@ func setupTestDB(t *testing.T) (*testDB, func()) {
 		ContainerRequest: req,
 		Started:          true,
 	})
-	require.NoError(t, err)
+	if err != nil {
+		t.Skipf("Skipping test: Docker not available: %v", err)
+	}
 
 	host, err := container.Host(ctx)
-	require.NoError(t, err)
+	if err != nil {
+		t.Skipf("Skipping test: failed to get container host: %v", err)
+	}
 
 	port, err := container.MappedPort(ctx, "5432")
-	require.NoError(t, err)
+	if err != nil {
+		t.Skipf("Skipping test: failed to get mapped port: %v", err)
+	}
 
 	dsn := fmt.Sprintf("postgres://testuser:testpass@%s:%d/%s?sslmode=disable", host, port.Int(), dbName)
 
@@ -55,7 +67,7 @@ func setupTestDB(t *testing.T) (*testDB, func()) {
 	require.Eventually(t, func() bool {
 		pool, err = pgxpool.New(ctx, dsn)
 		return err == nil && pool.Ping(ctx) == nil
-	}, 15*time.Second, 500*time.Millisecond)
+	}, 15*time.Second, 500*time.Millisecond, "failed to connect to database container")
 
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	_ = logger

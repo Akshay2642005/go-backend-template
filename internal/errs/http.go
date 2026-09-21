@@ -125,3 +125,23 @@ func ProblemValidation(detail string, fieldErrors []FieldError) *HTTPError {
 	e.Errors = fieldErrors
 	return e
 }
+
+// ProblemConflict creates a 409 Conflict error for resource conflicts.
+func ProblemConflict(resource, reason string) *HTTPError {
+	return NewProblemWithCode(
+		http.StatusConflict,
+		"CONFLICT",
+		"Conflict",
+		fmt.Sprintf("%s conflict: %s", resource, reason),
+	)
+}
+
+// ProblemUnprocessableEntity creates a 422 Unprocessable Entity error.
+func ProblemUnprocessableEntity(detail string) *HTTPError {
+	return NewProblemWithCode(
+		http.StatusUnprocessableEntity,
+		"UNPROCESSABLE_ENTITY",
+		"Unprocessable Entity",
+		detail,
+	)
+}

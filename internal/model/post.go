@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,10 +19,10 @@ const (
 // Post represents a blog post or article.
 type Post struct {
 	Base
-	Title     string     `json:"title" db:"title"`
-	Content   string     `json:"content" db:"content"`
-	Status    PostStatus `json:"status" db:"status"`
-	AuthorID  string     `json:"author_id" db:"author_id"`
+	Title    string     `json:"title" db:"title"`
+	Content  string     `json:"content" db:"content"`
+	Status   PostStatus `json:"status" db:"status"`
+	AuthorID string     `json:"author_id" db:"author_id"` // Clerk user ID
 }
 
 // CreatePostRequest is the request body for creating a post.
@@ -31,7 +32,13 @@ type CreatePostRequest struct {
 	Status  string `json:"status" validate:"omitempty,oneof=draft published archived"`
 }
 
-func (r CreatePostRequest) Validate() error { return nil }
+func (r CreatePostRequest) Validate() error {
+	// Cross-field validation
+	if r.Status == "published" && len(r.Content) < 50 {
+		return errors.New("published posts must have at least 50 characters of content")
+	}
+	return nil
+}
 
 // UpdatePostRequest is the request body for updating a post.
 type UpdatePostRequest struct {
@@ -40,7 +47,13 @@ type UpdatePostRequest struct {
 	Status  string `json:"status" validate:"omitempty,oneof=draft published archived"`
 }
 
-func (r UpdatePostRequest) Validate() error { return nil }
+func (r UpdatePostRequest) Validate() error {
+	// Cross-field validation
+	if r.Status == "published" && r.Content != "" && len(r.Content) < 50 {
+		return errors.New("published posts must have at least 50 characters of content")
+	}
+	return nil
+}
 
 // MaxListLimit caps page size for list endpoints. The request validation
 // tag enforces the same bound for HTTP callers; the service clamps
@@ -54,7 +67,13 @@ type ListPostsRequest struct {
 	Status string `query:"status" validate:"omitempty,oneof=draft published archived"`
 }
 
-func (r ListPostsRequest) Validate() error { return nil }
+func (r ListPostsRequest) Validate() error {
+	// Cross-field validation
+	if r.Page > 0 && r.Limit == 0 {
+		return errors.New("limit is required when page is specified")
+	}
+	return nil
+}
 
 // PostResponse is the response body for a single post.
 type PostResponse struct {

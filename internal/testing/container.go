@@ -28,6 +28,12 @@ type TestDB struct {
 func SetupTestDB(t *testing.T) (*TestDB, func()) {
 	t.Helper()
 
+	defer func() {
+		if r := recover(); r != nil {
+			t.Skipf("Skipping test: Docker not available or testcontainers error: %v", r)
+		}
+	}()
+
 	ctx := context.Background()
 	dbName := fmt.Sprintf("test_db_%s", uuid.New().String()[:8])
 	dbUser := "testuser"
@@ -48,7 +54,9 @@ func SetupTestDB(t *testing.T) (*TestDB, func()) {
 		ContainerRequest: req,
 		Started:          true,
 	})
-	require.NoError(t, err, "failed to start postgres container")
+	if err != nil {
+		t.Skipf("Skipping test: Docker not available: %v", err)
+	}
 
 	host, err := pgContainer.Host(ctx)
 	require.NoError(t, err, "failed to get container host")

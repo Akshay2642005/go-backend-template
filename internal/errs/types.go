@@ -86,3 +86,45 @@ func ValidationError(err error) *HTTPError {
 	e.Type = ProblemURI("VALIDATION_ERROR")
 	return e
 }
+
+// NewConflictError creates a 409 Conflict error for resource conflicts
+func NewConflictError(message string, override bool) *HTTPError {
+	code := MakeUpperCaseWithUnderscores(http.StatusText(http.StatusConflict))
+	return &HTTPError{
+		Type:     ProblemURI(code),
+		Title:    http.StatusText(http.StatusConflict),
+		Status:   http.StatusConflict,
+		Detail:   message,
+		Message:  message,
+		Code:     code,
+		Override: override,
+	}
+}
+
+// NewUnprocessableEntityError creates a 422 Unprocessable Entity error
+func NewUnprocessableEntityError(message string, override bool) *HTTPError {
+	code := MakeUpperCaseWithUnderscores(http.StatusText(http.StatusUnprocessableEntity))
+	return &HTTPError{
+		Type:     ProblemURI(code),
+		Title:    http.StatusText(http.StatusUnprocessableEntity),
+		Status:   http.StatusUnprocessableEntity,
+		Detail:   message,
+		Message:  message,
+		Code:     code,
+		Override: override,
+	}
+}
+
+// NewRateLimitError creates a 429 Too Many Requests error
+func NewRateLimitError(message string, override bool) *HTTPError {
+	code := MakeUpperCaseWithUnderscores(http.StatusText(http.StatusTooManyRequests))
+	return &HTTPError{
+		Type:     ProblemURI(code),
+		Title:    http.StatusText(http.StatusTooManyRequests),
+		Status:   http.StatusTooManyRequests,
+		Detail:   message,
+		Message:  message,
+		Code:     code,
+		Override: override,
+	}
+}

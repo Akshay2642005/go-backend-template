@@ -8,6 +8,7 @@ import (
 
 	"backend/internal/errs"
 	"backend/internal/lib/propagation"
+	"backend/internal/lib/security"
 	"backend/internal/model"
 	"backend/internal/repository"
 )
@@ -25,11 +26,11 @@ func NewPostService(repo *repository.PostRepository) *PostService {
 }
 
 // Create creates a new post. The authorID is resolved from propagated
-// context values (injected by ContextEnhancer), falling back to "anonymous".
+// context values (injected by ContextEnhancer) from the Clerk JWT.
 func (s *PostService) Create(ctx context.Context, req model.CreatePostRequest) (*model.Post, error) {
 	authorID := propagation.UserIDFrom(ctx)
 	if authorID == "" {
-		authorID = "anonymous"
+		return nil, errs.NewUnauthorizedError("User must be authenticated to create posts", false)
 	}
 
 	now := time.Now().UTC()
@@ -38,14 +39,18 @@ func (s *PostService) Create(ctx context.Context, req model.CreatePostRequest) (
 		status = model.PostStatus(req.Status)
 	}
 
+	// Sanitize user input
+	sanitizedTitle := security.SanitizeString(req.Title)
+	sanitizedContent := security.SanitizeHTML(req.Content)
+
 	post := &model.Post{
 		Base: model.Base{
-			BaseWithId: model.BaseWithId{ID: uuid.New()},
+			BaseWithId:        model.BaseWithId{ID: uuid.New()},
 			BaseWithCreatedAt: model.BaseWithCreatedAt{CreatedAt: now},
 			BaseWithUpdatedAt: model.BaseWithUpdatedAt{UpdatedAt: now},
 		},
-		Title:    req.Title,
-		Content:  req.Content,
+		Title:    sanitizedTitle,
+		Content:  sanitizedContent,
 		Status:   status,
 		AuthorID: authorID,
 	}
@@ -86,11 +91,13 @@ func (s *PostService) List(ctx context.Context, req model.ListPostsRequest) ([]m
 	return s.repo.List(ctx, limit, offset, req.Status)
 }
 
-// authorizePostAuthor ensures the caller owns the post. An empty user ID
-// never matches, so unauthenticated callers are denied by default.
+// authorizePostAuthor ensures the caller owns the post.
 func authorizePostAuthor(ctx context.Context, post *model.Post) error {
 	userID := propagation.UserIDFrom(ctx)
-	if userID == "" || userID != post.AuthorID {
+	if userID == "" {
+		return errs.NewUnauthorizedError("User must be authenticated", false)
+	}
+	if userID != post.AuthorID {
 		return errs.NewForbiddenError("you do not have permission to modify this post", false)
 	}
 	return nil
@@ -110,14 +117,14 @@ func (s *PostService) Update(ctx context.Context, id uuid.UUID, req model.Update
 		return nil, err
 	}
 
-	// Apply updates
+	// Apply updates with sanitization
 	title := existing.Title
 	if req.Title != "" {
-		title = req.Title
+		title = security.SanitizeString(req.Title)
 	}
 	content := existing.Content
 	if req.Content != "" {
-		content = req.Content
+		content = security.SanitizeHTML(req.Content)
 	}
 	status := existing.Status
 	if req.Status != "" {

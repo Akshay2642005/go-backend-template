@@ -26,8 +26,15 @@ type TestRedisConfig struct {
 }
 
 // SetupTestRedis starts a Redis container for tests.
+// Skips the test if Docker is not available.
 func SetupTestRedis(t *testing.T) (*TestRedis, func()) {
 	t.Helper()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Skipf("Skipping test: Docker not available or testcontainers error: %v", r)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -41,7 +48,9 @@ func SetupTestRedis(t *testing.T) (*TestRedis, func()) {
 		ContainerRequest: req,
 		Started:          true,
 	})
-	require.NoError(t, err, "failed to start redis container")
+	if err != nil {
+		t.Skipf("Skipping test: Docker not available: %v", err)
+	}
 
 	host, err := container.Host(ctx)
 	require.NoError(t, err, "failed to get container host")

@@ -18,8 +18,8 @@ schema changes managed by **tern** migrations. **Redis** does double duty:
 it's the cache and the backbone of the background job queue (**asynq**).
 
 Authentication is handled by **Clerk**, so you never store passwords or
-manage sessions yourself — you validate a JWT and trust the user ID inside
-it. Outgoing mail goes through **Resend**.
+manage sessions yourself — you validate a JWT and use the user ID inside
+it for authorization. Outgoing mail goes through **Resend**.
 
 For configuration, the app reads environment variables through **koanf**,
 which maps them onto typed structs and validates them at startup. If you
@@ -103,7 +103,7 @@ outside modules import it — this is your private codebase. Here's the tour:
   limiting, request IDs, logging, tracing, caching headers.
 - `cache/` — typed Redis helpers with stampede protection and metrics.
 - `lib/` — shared libraries that don't belong to a layer: the circuit
-  breaker, the email client, the job queue, and context propagation.
+  breaker, the email client, the job queue, context propagation, and security utilities.
 - `errs/` — error types and constructors. Every error your API returns is
   built here.
 - `config/`, `database/`, `server/`, `logger/`, `otel/`, `validation/` —
@@ -178,9 +178,9 @@ extract the user ID. Services never import Clerk or Echo. Instead:
    Echo context (`c.Set("user_id", ...)`).
 2. The `ContextEnhancer` — which runs on every request — copies that ID
    into `PropagatedValues` inside the standard `context.Context`.
-3. Services read it with `propagation.UserIDFrom(ctx)`. If nobody is
-   logged in (or the value wasn't set), they get an empty string and
-   decide what that means — for posts, it means `"anonymous"`.
+3. Services read it with `propagation.UserIDFrom(ctx)`. This is the Clerk
+   user ID that can be used for authorization and associating resources
+   with users.
 
 Because the user ID travels in `context.Context` rather than Echo state,
 it survives the trip into background jobs too. When you enqueue work with
