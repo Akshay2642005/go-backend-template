@@ -29,14 +29,22 @@ func (l *zerologLogger) Error(args ...interface{}) { l.log.Error().Msg(fmt.Sprin
 func (l *zerologLogger) Fatal(args ...interface{}) { l.log.Fatal().Msg(fmt.Sprint(args...)) }
 
 func NewJobService(logger *zerolog.Logger, cfg *config.Config) *JobService {
-	redisAddr := cfg.Redis.Address
+	redisCfg := cfg.Redis
 
 	client := asynq.NewClient(asynq.RedisClientOpt{
-		Addr: redisAddr,
+		Addr:     redisCfg.Address,
+		Username: redisCfg.Username,
+		Password: redisCfg.Password,
+		DB:       redisCfg.DB,
 	})
 
 	server := asynq.NewServer(
-		asynq.RedisClientOpt{Addr: redisAddr},
+		asynq.RedisClientOpt{
+			Addr:     redisCfg.Address,
+			Username: redisCfg.Username,
+			Password: redisCfg.Password,
+			DB:       redisCfg.DB,
+		},
 		asynq.Config{
 			Concurrency: 10,
 			Queues: map[string]int{
