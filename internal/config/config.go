@@ -156,6 +156,8 @@ func LoadConfig() (*Config, error) {
 	k := koanf.New(".")
 
 	err := k.Load(env.Provider("BOILERPLATE_", ".", func(s string) string {
+		// Replace __ with . for nested config structure
+		s = strings.ReplaceAll(s, "__", ".")
 		return strings.ToLower(strings.TrimPrefix(s, "BOILERPLATE_"))
 	}), nil)
 	if err != nil {

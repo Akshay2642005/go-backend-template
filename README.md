@@ -415,7 +415,7 @@ When you're ready to deploy, work through these:
 
 - Swap in the real Clerk and Resend keys — the example values boot but
   don't do anything useful.
-- Set `BOILERPLATE_PRIMARY.ENV` to your environment name. Anything other
+- Set `BOILERPLATE_PRIMARY__ENV` to your environment name. Anything other
   than `local` makes the app migrate on boot, which is what you want if
   nothing else runs migrations.
 - Decide who runs migrations: the app (`AUTO_MIGRATE=true`, simplest in
