@@ -38,6 +38,9 @@ tasks:
   test:
     desc: run all tests
     cmds:
+      # only for users using colima for docker runtime instead of docker desktop in macos, else comment, the next two lines
+      - export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+      - export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
       - go test ./...
 
   migrations:new:

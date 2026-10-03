@@ -10,6 +10,24 @@
 name: boilerplate
 
 services:
+  server:
+    build:
+      context: .
+      target: final
+    ports:
+      - 8080:8080
+    env_file:
+      - .env
+    environment:
+      # Override localhost values so they resolve to Docker service names
+      BOILERPLATE_DATABASE.HOST: postgres
+      BOILERPLATE_REDIS.ADDRESS: redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
   postgres:
     image: postgres:16-alpine
     container_name: boilerplate-postgres
