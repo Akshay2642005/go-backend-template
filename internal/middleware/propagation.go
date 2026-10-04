@@ -10,12 +10,12 @@ import (
 type PropagatedValues = propagation.PropagatedValues
 
 var (
-	WithPropagatedValues   = propagation.WithPropagatedValues
-	PropagatedValuesFrom   = propagation.PropagatedValuesFrom
-	RequestIDFrom          = propagation.RequestIDFrom
-	UserIDFrom             = propagation.UserIDFrom
-	TraceIDFrom            = propagation.TraceIDFrom
-	SpanIDFrom             = propagation.SpanIDFrom
+	WithPropagatedValues = propagation.WithPropagatedValues
+	PropagatedValuesFrom = propagation.PropagatedValuesFrom
+	RequestIDFrom        = propagation.RequestIDFrom
+	UserIDFrom           = propagation.UserIDFrom
+	TraceIDFrom          = propagation.TraceIDFrom
+	SpanIDFrom           = propagation.SpanIDFrom
 )
 
 // Ensure the type alias works correctly at compile time.

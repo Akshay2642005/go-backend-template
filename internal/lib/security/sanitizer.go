@@ -7,25 +7,30 @@ import (
 	"unicode"
 )
 
-// SanitizeHTML removes potentially dangerous HTML tags and attributes
+// SanitizeHTML removes dangerous markup and escapes the rest. Stripping
+// happens before escaping: once entities are escaped there are no literal
+// tags left for the patterns to match.
 func SanitizeHTML(input string) string {
-	// First escape HTML entities
-	sanitized := html.EscapeString(input)
+	// Strip script blocks entirely (including contents).
+	scriptRegex := regexp.MustCompile(`(?is)<script.*?>.*?</script>`)
+	sanitized := scriptRegex.ReplaceAllString(input, "")
 
-	// Remove any remaining script tags and event handlers
-	scriptRegex := regexp.MustCompile(`(?i)<script.*?>.*?</script>`)
-	sanitized = scriptRegex.ReplaceAllString(sanitized, "")
-
-	eventRegex := regexp.MustCompile(`(?i)on\w+\s*=`)
+	// Strip event-handler attributes with their values, preserving the
+	// preceding space so `<div onclick="...">` becomes `<div >`.
+	eventRegex := regexp.MustCompile(`(?i)on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
 	sanitized = eventRegex.ReplaceAllString(sanitized, "")
 
-	return sanitized
+	// Escape everything that remains.
+	return html.EscapeString(sanitized)
 }
 
-// SanitizeString removes potentially dangerous characters from user input
+// SanitizeString removes potentially dangerous characters from user input.
+// Surrounding spaces are trimmed, but newlines and tabs are preserved
+// (they are legitimate content); other control characters are stripped.
 func SanitizeString(input string) string {
-	// Trim whitespace
-	sanitized := strings.TrimSpace(input)
+	// Trim spaces only — TrimSpace would also strip the newlines and
+	// tabs this function promises to preserve.
+	sanitized := strings.Trim(input, " ")
 
 	// Remove null bytes
 	sanitized = strings.ReplaceAll(sanitized, "\x00", "")
