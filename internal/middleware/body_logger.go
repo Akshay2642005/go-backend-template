@@ -22,8 +22,8 @@ type BodyLoggerConfig struct {
 }
 
 // BodyLogger is middleware that logs request and response bodies at debug
-// level, truncating payloads larger than 1 KB. Health, docs, and static
-// paths are skipped by default.
+// level, truncating payloads larger than 1 KB. Health paths are skipped
+// by default.
 type BodyLogger struct {
 	config    BodyLoggerConfig
 	skipPaths map[string]bool
@@ -35,12 +35,10 @@ func NewBodyLogger(config BodyLoggerConfig) *BodyLogger {
 	for _, p := range config.SkipPaths {
 		skip[p] = true
 	}
-	// Always skip health and docs endpoints
+	// Always skip health endpoints
 	skip["/healthz"] = true
 	skip["/readyz"] = true
 	skip["/status"] = true
-	skip["/docs"] = true
-	skip["/static"] = true
 
 	return &BodyLogger{
 		config:    config,

@@ -15,8 +15,4 @@ func registerSystemRoutes(r *echo.Echo, h *handler.Handlers) {
 
 	// Legacy full health check with detailed dependency info
 	r.GET("/status", h.Health.CheckHealth)
-
-	r.Static("/static", "static")
-
-	r.GET("/docs", h.OpenAPI.ServeOpenAPIUI)
 }

@@ -72,19 +72,15 @@ func TestBodyLogger_SkipsHealthEndpoints(t *testing.T) {
 	}
 }
 
-func TestBodyLogger_SkipsDocsAndStatic(t *testing.T) {
+func TestBodyLogger_PassesThroughNonHealthPaths(t *testing.T) {
 	e := echo.New()
 	e.Use(NewBodyLogger(BodyLoggerConfig{Enabled: true}).Handle())
 
-	e.GET("/docs", func(c echo.Context) error {
-		return c.JSON(200, map[string]string{"status": "docs"})
+	e.GET("/api/v1/posts", func(c echo.Context) error {
+		return c.JSON(200, map[string]string{"status": "posts"})
 	})
 
-	e.GET("/static/file.txt", func(c echo.Context) error {
-		return c.JSON(200, map[string]string{"status": "file"})
-	})
-
-	for _, path := range []string{"/docs", "/static/file.txt"} {
+	for _, path := range []string{"/api/v1/posts"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)

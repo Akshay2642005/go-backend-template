@@ -67,8 +67,7 @@ task migrations:up   # creates the tables
 task run             # starts the API on :8080
 ```
 
-Visit `http://localhost:8080/docs` and you'll see the interactive API
-explorer. `/healthz` should return 200 — that means you're up.
+Hit `/healthz` — a 200 means you're up.
 
 A few other commands you'll use daily:
 
@@ -110,7 +109,6 @@ outside modules import it — this is your private codebase. Here's the tour:
   infrastructure. You'll configure these more than you'll change them.
 - `testing/` — helpers for tests: throwaway databases, transaction
   wrappers, assertions.
-- `static/openapi.json` — the API contract. The `/docs` page renders it.
 - `templates/emails/` — HTML email templates.
 
 ## How a Request Travels Through the System
@@ -359,15 +357,13 @@ doesn't, don't start one.
 
 ## The API
 
-The contract lives in `static/openapi.json` and renders interactively at
-`/docs`. Protected routes expect `Authorization: Bearer <clerk-jwt>`.
+Protected routes expect `Authorization: Bearer <clerk-jwt>`.
 
 | Method | Path | Auth | What it does |
 |---|---|---|---|
 | GET | `/healthz` | — | Liveness: is the process alive? |
 | GET | `/readyz` | — | Readiness: can it serve? checks DB + Redis |
 | GET | `/status` | — | Legacy health details |
-| GET | `/docs` | — | Interactive API explorer |
 | GET | `/api/v1/posts` | Clerk | List posts (`page`, `limit`, `status` filter) |
 | POST | `/api/v1/posts` | Clerk | Create a post (send `Idempotency-Key` to dedupe retries) |
 | GET | `/api/v1/posts/:id` | Clerk | Fetch one post |
@@ -405,9 +401,10 @@ in `NewHandlers`, and you're nearly there.
 
 Finally, **routes**: a small `comment_routes.go` that creates the group,
 attaches `RequireAuth`, and binds methods to handler functions. Register
-it from `router.go`, add the paths to `static/openapi.json`, and your
-resource is live with auth, validation, logging, tracing, rate limiting,
-and error handling — all inherited, none reimplemented.
+it from `router.go`, and register the endpoint's metadata next to its
+route so it appears in the generated docs — auth, validation, logging,
+tracing, rate limiting, and error handling are all inherited, none
+reimplemented.
 
 ## Going to Production
 
